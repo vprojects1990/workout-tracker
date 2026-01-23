@@ -1,14 +1,22 @@
 import { useState, useEffect, useCallback } from 'react';
 import { db } from '@/db';
 import { exercises, setLogs, workoutSessions, templateExercises } from '@/db/schema';
-import { eq, desc, isNotNull } from 'drizzle-orm';
+import { eq, desc, isNotNull, and } from 'drizzle-orm';
 
 export type ProgressStatus = 'progressing' | 'maintaining' | 'stalled';
+
+export type SourceWorkout = {
+  sessionId: string;
+  templateName: string | null;
+  date: Date;
+  maxWeight: number;
+};
 
 export type ExerciseProgress = {
   exerciseId: string;
   exerciseName: string;
   equipment: string;
+  primaryMuscle: string;
   targetRepMin: number;
   targetRepMax: number;
   currentWeight: number | null;
@@ -17,6 +25,12 @@ export type ExerciseProgress = {
   status: ProgressStatus;
   sessionsAtCurrentWeight: number;
   readyToIncrease: boolean;
+  sourceWorkouts: SourceWorkout[];
+};
+
+export type ProgressiveOverloadOptions = {
+  sessionId?: string;
+  templateId?: string;
 };
 
 function determineStatus(
@@ -61,7 +75,7 @@ function determineStatus(
   return { status: 'maintaining', readyToIncrease: false };
 }
 
-export function useProgressiveOverload() {
+export function useProgressiveOverload(options?: ProgressiveOverloadOptions) {
   const [exerciseProgress, setExerciseProgress] = useState<ExerciseProgress[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -98,22 +112,68 @@ export function useProgressiveOverload() {
         const templateEx = templateExercisesList.find(te => te.exerciseId === exerciseId);
         if (!templateEx) continue;
 
-        // Get all completed sessions
-        const completedSessions = await db
-          .select({ id: workoutSessions.id, completedAt: workoutSessions.completedAt })
-          .from(workoutSessions)
-          .where(isNotNull(workoutSessions.completedAt))
-          .orderBy(desc(workoutSessions.completedAt));
+        // Build session query with optional filters
+        let completedSessions: { id: string; completedAt: Date | null; templateId: string | null; templateName: string }[];
+
+        if (options?.sessionId) {
+          // Filter by specific session
+          completedSessions = await db
+            .select({
+              id: workoutSessions.id,
+              completedAt: workoutSessions.completedAt,
+              templateId: workoutSessions.templateId,
+              templateName: workoutSessions.templateName,
+            })
+            .from(workoutSessions)
+            .where(and(
+              isNotNull(workoutSessions.completedAt),
+              eq(workoutSessions.id, options.sessionId)
+            ))
+            .orderBy(desc(workoutSessions.completedAt));
+        } else if (options?.templateId) {
+          // Filter by template
+          completedSessions = await db
+            .select({
+              id: workoutSessions.id,
+              completedAt: workoutSessions.completedAt,
+              templateId: workoutSessions.templateId,
+              templateName: workoutSessions.templateName,
+            })
+            .from(workoutSessions)
+            .where(and(
+              isNotNull(workoutSessions.completedAt),
+              eq(workoutSessions.templateId, options.templateId)
+            ))
+            .orderBy(desc(workoutSessions.completedAt));
+        } else {
+          // No filter - get all completed sessions
+          completedSessions = await db
+            .select({
+              id: workoutSessions.id,
+              completedAt: workoutSessions.completedAt,
+              templateId: workoutSessions.templateId,
+              templateName: workoutSessions.templateName,
+            })
+            .from(workoutSessions)
+            .where(isNotNull(workoutSessions.completedAt))
+            .orderBy(desc(workoutSessions.completedAt));
+        }
 
         // Get sets for this exercise from completed sessions
-        const allSets: { sessionId: string; weight: number; reps: number; completedAt: Date }[] = [];
-        
+        const allSets: {
+          sessionId: string;
+          weight: number;
+          reps: number;
+          completedAt: Date;
+          templateName: string;
+        }[] = [];
+
         for (const session of completedSessions) {
           const sessionSets = await db
             .select()
             .from(setLogs)
             .where(eq(setLogs.sessionId, session.id));
-          
+
           const exerciseSets = sessionSets.filter(s => s.exerciseId === exerciseId);
           for (const set of exerciseSets) {
             allSets.push({
@@ -121,6 +181,7 @@ export function useProgressiveOverload() {
               weight: set.weight,
               reps: set.reps,
               completedAt: session.completedAt!,
+              templateName: session.templateName,
             });
           }
         }
@@ -130,6 +191,7 @@ export function useProgressiveOverload() {
             exerciseId,
             exerciseName: exercise.name,
             equipment: exercise.equipment,
+            primaryMuscle: exercise.primaryMuscle,
             targetRepMin: templateEx.targetRepMin,
             targetRepMax: templateEx.targetRepMax,
             currentWeight: null,
@@ -138,20 +200,45 @@ export function useProgressiveOverload() {
             status: 'maintaining',
             sessionsAtCurrentWeight: 0,
             readyToIncrease: false,
+            sourceWorkouts: [],
           });
           continue;
         }
 
-        // Group by session
-        const sessionGroups = new Map<string, { weight: number; reps: number[] }>();
+        // Group by session and track source workouts
+        const sessionGroups = new Map<string, {
+          weight: number;
+          reps: number[];
+          completedAt: Date;
+          templateName: string;
+          maxWeight: number;
+        }>();
+
         for (const set of allSets) {
           const existing = sessionGroups.get(set.sessionId);
           if (existing) {
             existing.reps.push(set.reps);
+            existing.maxWeight = Math.max(existing.maxWeight, set.weight);
           } else {
-            sessionGroups.set(set.sessionId, { weight: set.weight, reps: [set.reps] });
+            sessionGroups.set(set.sessionId, {
+              weight: set.weight,
+              reps: [set.reps],
+              completedAt: set.completedAt,
+              templateName: set.templateName,
+              maxWeight: set.weight,
+            });
           }
         }
+
+        // Build sourceWorkouts array
+        const sourceWorkouts: SourceWorkout[] = Array.from(sessionGroups.entries()).map(
+          ([sessionId, data]) => ({
+            sessionId,
+            templateName: data.templateName || null,
+            date: data.completedAt,
+            maxWeight: data.maxWeight,
+          })
+        );
 
         const sessions = Array.from(sessionGroups.values());
         const lastSession = sessions[0];
@@ -178,6 +265,7 @@ export function useProgressiveOverload() {
           exerciseId,
           exerciseName: exercise.name,
           equipment: exercise.equipment,
+          primaryMuscle: exercise.primaryMuscle,
           targetRepMin: templateEx.targetRepMin,
           targetRepMax: templateEx.targetRepMax,
           currentWeight: lastSession.weight,
@@ -186,6 +274,7 @@ export function useProgressiveOverload() {
           status,
           sessionsAtCurrentWeight: sessionsAtWeight,
           readyToIncrease,
+          sourceWorkouts,
         });
       }
 
@@ -202,7 +291,7 @@ export function useProgressiveOverload() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [options?.sessionId, options?.templateId]);
 
   useEffect(() => {
     fetchProgress();
