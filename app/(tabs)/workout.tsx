@@ -1,7 +1,10 @@
+import { useState } from 'react';
 import { StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { Text, View } from '@/components/Themed';
-import { useWorkoutTemplates, TemplateWithDetails } from '@/hooks/useWorkoutTemplates';
+import { useWorkoutSplits, TemplateWithDetails, SplitWithTemplates } from '@/hooks/useWorkoutTemplates';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { useColorScheme } from '@/components/useColorScheme';
 
 function formatLastPerformed(date: Date | null): string {
   if (!date) return 'Never';
@@ -35,11 +38,43 @@ function TemplateCard({ template }: { template: TemplateWithDetails }) {
   );
 }
 
-export default function WorkoutScreen() {
-  const { templates, loading, error } = useWorkoutTemplates();
+function SplitContainer({ split }: { split: SplitWithTemplates }) {
+  const [expanded, setExpanded] = useState(true);
+  const colorScheme = useColorScheme();
+  const iconColor = colorScheme === 'dark' ? '#fff' : '#000';
 
-  const upperTemplates = templates.filter(t => t.type === 'upper');
-  const lowerTemplates = templates.filter(t => t.type === 'lower');
+  return (
+    <View style={styles.splitContainer}>
+      <Pressable style={styles.splitHeader} onPress={() => setExpanded(!expanded)}>
+        <View style={styles.splitTitleContainer}>
+          <Text style={styles.splitName}>{split.name}</Text>
+          {split.description && (
+            <Text style={styles.splitDescription}>{split.description}</Text>
+          )}
+        </View>
+        <Ionicons
+          name={expanded ? 'chevron-up' : 'chevron-down'}
+          size={24}
+          color={iconColor}
+        />
+      </Pressable>
+
+      {expanded && (
+        <View style={styles.templatesContainer}>
+          {split.templates.map(template => (
+            <TemplateCard key={template.id} template={template} />
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+export default function WorkoutScreen() {
+  const router = useRouter();
+  const colorScheme = useColorScheme();
+  const iconColor = colorScheme === 'dark' ? '#fff' : '#000';
+  const { splits, standaloneTemplates, loading, error } = useWorkoutSplits();
 
   if (loading) {
     return (
@@ -60,23 +95,47 @@ export default function WorkoutScreen() {
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Workouts</Text>
+        <View style={styles.headerTop}>
+          <Text style={styles.title}>Workouts</Text>
+          <Pressable onPress={() => router.push('/settings')} style={styles.settingsButton}>
+            <Ionicons name="settings-outline" size={24} color={iconColor} />
+          </Pressable>
+        </View>
         <Text style={styles.subtitle}>Select a workout to begin</Text>
       </View>
 
+      {/* Quick Actions */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Upper</Text>
-        {upperTemplates.map(template => (
-          <TemplateCard key={template.id} template={template} />
-        ))}
+        <Pressable
+          style={styles.emptyWorkoutButton}
+          onPress={() => router.push('/workout/empty')}
+        >
+          <Ionicons name="add-circle-outline" size={24} color="#007AFF" />
+          <Text style={styles.emptyWorkoutText}>Start Empty Workout</Text>
+        </Pressable>
+        <Pressable
+          style={styles.createSplitButton}
+          onPress={() => router.push('/workout/create-split')}
+        >
+          <Ionicons name="fitness-outline" size={24} color="#34C759" />
+          <Text style={styles.createSplitText}>Create Workout Split</Text>
+        </Pressable>
       </View>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Lower</Text>
-        {lowerTemplates.map(template => (
-          <TemplateCard key={template.id} template={template} />
-        ))}
-      </View>
+      {/* Workout Splits */}
+      {splits.map(split => (
+        <SplitContainer key={split.id} split={split} />
+      ))}
+
+      {/* Standalone Templates (if any) */}
+      {standaloneTemplates.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Other Workouts</Text>
+          {standaloneTemplates.map(template => (
+            <TemplateCard key={template.id} template={template} />
+          ))}
+        </View>
+      )}
     </ScrollView>
   );
 }
@@ -104,9 +163,18 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingTop: 60,
   },
+  headerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+  },
   title: {
     fontSize: 32,
     fontWeight: 'bold',
+  },
+  settingsButton: {
+    padding: 4,
   },
   subtitle: {
     fontSize: 16,
@@ -122,11 +190,72 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 12,
   },
-  templateCard: {
-    backgroundColor: 'rgba(128, 128, 128, 0.1)',
+  emptyWorkoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0, 122, 255, 0.1)',
     borderRadius: 12,
     padding: 16,
-    marginBottom: 12,
+    gap: 8,
+  },
+  emptyWorkoutText: {
+    color: '#007AFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  createSplitButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(52, 199, 89, 0.1)',
+    borderRadius: 12,
+    padding: 16,
+    gap: 8,
+    marginTop: 12,
+  },
+  createSplitText: {
+    color: '#34C759',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  splitContainer: {
+    marginHorizontal: 20,
+    marginBottom: 16,
+    backgroundColor: 'rgba(128, 128, 128, 0.1)',
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  splitHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: 'transparent',
+  },
+  splitTitleContainer: {
+    flex: 1,
+    backgroundColor: 'transparent',
+  },
+  splitName: {
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  splitDescription: {
+    fontSize: 12,
+    opacity: 0.6,
+    marginTop: 2,
+  },
+  templatesContainer: {
+    paddingHorizontal: 12,
+    paddingBottom: 12,
+    backgroundColor: 'transparent',
+  },
+  templateCard: {
+    backgroundColor: 'rgba(128, 128, 128, 0.15)',
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 8,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -135,11 +264,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   templateName: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
   },
   templateMeta: {
-    fontSize: 14,
+    fontSize: 13,
     opacity: 0.7,
     marginTop: 2,
   },
