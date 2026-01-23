@@ -72,7 +72,32 @@ function RootLayoutNav() {
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-        <Stack.Screen name="workout/[id]" options={{ presentation: 'modal', headerShown: false }} />
+        <Stack.Screen
+          name="workout/[id]"
+          options={{
+            presentation: 'modal',
+            headerShown: true,
+            headerTitle: 'Workout',
+            headerBackTitle: 'Back',
+          }}
+        />
+        <Stack.Screen
+          name="workout/empty"
+          options={{
+            presentation: 'modal',
+            headerShown: true,
+            headerTitle: 'Empty Workout',
+            headerBackTitle: 'Back',
+          }}
+        />
+        <Stack.Screen
+          name="settings"
+          options={{
+            headerShown: true,
+            headerTitle: 'Settings',
+            headerBackTitle: 'Back',
+          }}
+        />
       </Stack>
     </ThemeProvider>
   );
