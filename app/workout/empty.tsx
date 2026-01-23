@@ -249,40 +249,46 @@ export default function EmptyWorkoutScreen() {
 
       {/* Exercise Picker Modal */}
       <Modal visible={showExercisePicker} animationType="slide">
-        <View style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Add Exercise</Text>
-            <Pressable onPress={() => { setShowExercisePicker(false); setSearchQuery(''); }}>
-              <Ionicons name="close" size={28} color={iconColor} />
-            </Pressable>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+          keyboardVerticalOffset={60}
+        >
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Add Exercise</Text>
+              <Pressable onPress={() => { setShowExercisePicker(false); setSearchQuery(''); }}>
+                <Ionicons name="close" size={28} color={iconColor} />
+              </Pressable>
+            </View>
+
+            <TextInput
+              style={[styles.searchInput, colorScheme === 'dark' ? styles.searchInputDark : styles.searchInputLight]}
+              placeholder="Search exercises..."
+              placeholderTextColor="#999"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+
+            <ScrollView style={styles.exerciseList} keyboardShouldPersistTaps="handled">
+              {Object.entries(groupedExercises).map(([muscle, exercises]) => (
+                <View key={muscle} style={styles.muscleGroup}>
+                  <Text style={styles.muscleTitle}>{MUSCLE_LABELS[muscle] || muscle}</Text>
+                  {exercises.map(ex => (
+                    <Pressable
+                      key={ex.id}
+                      style={styles.exerciseItem}
+                      onPress={() => addExercise(ex)}
+                    >
+                      <Text style={styles.exerciseItemName}>{ex.name}</Text>
+                      <Text style={styles.exerciseItemEquipment}>{EQUIPMENT_LABELS[ex.equipment]}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              ))}
+            </ScrollView>
           </View>
-
-          <TextInput
-            style={[styles.searchInput, colorScheme === 'dark' ? styles.searchInputDark : styles.searchInputLight]}
-            placeholder="Search exercises..."
-            placeholderTextColor="#999"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-
-          <ScrollView style={styles.exerciseList}>
-            {Object.entries(groupedExercises).map(([muscle, exercises]) => (
-              <View key={muscle} style={styles.muscleGroup}>
-                <Text style={styles.muscleTitle}>{MUSCLE_LABELS[muscle] || muscle}</Text>
-                {exercises.map(ex => (
-                  <Pressable
-                    key={ex.id}
-                    style={styles.exerciseItem}
-                    onPress={() => addExercise(ex)}
-                  >
-                    <Text style={styles.exerciseItemName}>{ex.name}</Text>
-                    <Text style={styles.exerciseItemEquipment}>{EQUIPMENT_LABELS[ex.equipment]}</Text>
-                  </Pressable>
-                ))}
-              </View>
-            ))}
-          </ScrollView>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
