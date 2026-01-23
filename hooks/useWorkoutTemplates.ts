@@ -254,7 +254,7 @@ export function useAllExercises() {
 export function useWorkoutMutations() {
   // Create a new workout split
   async function createWorkoutSplit(name: string, description?: string): Promise<string> {
-    const id = 'split-' + Date.now();
+    const id = 'split-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
     await db.insert(workoutSplits).values({
       id,
       name,
@@ -271,7 +271,7 @@ export function useWorkoutMutations() {
     type: string,
     orderIndex: number
   ): Promise<string> {
-    const id = 'template-' + Date.now();
+    const id = 'template-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
     await db.insert(workoutTemplates).values({
       id,
       splitId,
@@ -292,7 +292,7 @@ export function useWorkoutMutations() {
     targetRepMin: number,
     targetRepMax: number
   ): Promise<void> {
-    const id = 'texercise-' + Date.now();
+    const id = 'texercise-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
     await db.insert(templateExercises).values({
       id,
       templateId,
@@ -306,30 +306,32 @@ export function useWorkoutMutations() {
 
   // Delete a split and its templates (cascading delete)
   async function deleteWorkoutSplit(splitId: string): Promise<void> {
-    // First, get all templates belonging to this split
-    const templatesInSplit = await db
-      .select({ id: workoutTemplates.id })
-      .from(workoutTemplates)
-      .where(eq(workoutTemplates.splitId, splitId));
+    await db.transaction(async (tx) => {
+      // First, get all templates belonging to this split
+      const templatesInSplit = await tx
+        .select({ id: workoutTemplates.id })
+        .from(workoutTemplates)
+        .where(eq(workoutTemplates.splitId, splitId));
 
-    const templateIds = templatesInSplit.map(t => t.id);
+      const templateIds = templatesInSplit.map(t => t.id);
 
-    // Delete all template exercises for these templates
-    if (templateIds.length > 0) {
-      await db
-        .delete(templateExercises)
-        .where(inArray(templateExercises.templateId, templateIds));
-    }
+      // Delete all template exercises for these templates
+      if (templateIds.length > 0) {
+        await tx
+          .delete(templateExercises)
+          .where(inArray(templateExercises.templateId, templateIds));
+      }
 
-    // Delete all templates belonging to the split
-    await db
-      .delete(workoutTemplates)
-      .where(eq(workoutTemplates.splitId, splitId));
+      // Delete all templates belonging to the split
+      await tx
+        .delete(workoutTemplates)
+        .where(eq(workoutTemplates.splitId, splitId));
 
-    // Finally, delete the split itself
-    await db
-      .delete(workoutSplits)
-      .where(eq(workoutSplits.id, splitId));
+      // Finally, delete the split itself
+      await tx
+        .delete(workoutSplits)
+        .where(eq(workoutSplits.id, splitId));
+    });
   }
 
   return {
