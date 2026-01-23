@@ -76,26 +76,21 @@ function RootLayoutNav() {
           name="workout/[id]"
           options={{
             presentation: 'modal',
-            headerShown: true,
-            headerTitle: 'Workout',
-            headerBackTitle: 'Back',
+            headerShown: false,
           }}
         />
         <Stack.Screen
           name="workout/empty"
           options={{
             presentation: 'modal',
-            headerShown: true,
-            headerTitle: 'Empty Workout',
-            headerBackTitle: 'Back',
+            headerShown: false,
           }}
         />
         <Stack.Screen
           name="settings"
           options={{
-            headerShown: true,
-            headerTitle: 'Settings',
-            headerBackTitle: 'Back',
+            presentation: 'modal',
+            headerShown: false,
           }}
         />
       </Stack>
