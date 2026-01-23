@@ -1,9 +1,18 @@
 import { db } from './index';
-import { exercises, workoutTemplates, templateExercises, userSettings } from './schema';
+import { exercises, workoutTemplates, templateExercises, userSettings, workoutSplits } from './schema';
 import { sql } from 'drizzle-orm';
 
 export async function runMigrations() {
   // Create tables if they don't exist
+  await db.run(sql`
+    CREATE TABLE IF NOT EXISTS workout_splits (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT,
+      created_at INTEGER NOT NULL
+    )
+  `);
+
   await db.run(sql`
     CREATE TABLE IF NOT EXISTS exercises (
       id TEXT PRIMARY KEY,
@@ -18,8 +27,10 @@ export async function runMigrations() {
   await db.run(sql`
     CREATE TABLE IF NOT EXISTS workout_templates (
       id TEXT PRIMARY KEY,
+      split_id TEXT REFERENCES workout_splits(id),
       name TEXT NOT NULL,
       type TEXT NOT NULL,
+      order_index INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL
     )
   `);
@@ -73,4 +84,26 @@ export async function runMigrations() {
     INSERT OR IGNORE INTO user_settings (id, weight_unit, default_rest_seconds, theme)
     VALUES ('default', 'kg', 90, 'system')
   `);
+
+  // Migration: Add split_id column to workout_templates if it doesn't exist
+  // This handles databases created before splits were introduced
+  try {
+    await db.run(sql`ALTER TABLE workout_templates ADD COLUMN split_id TEXT REFERENCES workout_splits(id)`);
+  } catch (e) {
+    // Column already exists, ignore the error
+  }
+
+  // Migration: Add order_index column to workout_templates if it doesn't exist
+  try {
+    await db.run(sql`ALTER TABLE workout_templates ADD COLUMN order_index INTEGER NOT NULL DEFAULT 0`);
+  } catch (e) {
+    // Column already exists, ignore the error
+  }
+
+  // Migration: Add day_of_week column to workout_templates if it doesn't exist
+  try {
+    await db.run(sql`ALTER TABLE workout_templates ADD COLUMN day_of_week INTEGER`);
+  } catch (e) {
+    // Column already exists, ignore the error
+  }
 }
