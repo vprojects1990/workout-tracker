@@ -1,5 +1,13 @@
 import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core';
 
+// Workout splits - containers for workout templates (e.g., "4-Day Upper/Lower")
+export const workoutSplits = sqliteTable('workout_splits', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  description: text('description'),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+});
+
 // Exercises table - the library of available exercises
 export const exercises = sqliteTable('exercises', {
   id: text('id').primaryKey(),
@@ -13,8 +21,11 @@ export const exercises = sqliteTable('exercises', {
 // Workout templates - saved workout routines
 export const workoutTemplates = sqliteTable('workout_templates', {
   id: text('id').primaryKey(),
+  splitId: text('split_id').references(() => workoutSplits.id), // null for standalone workouts
   name: text('name').notNull(),
   type: text('type').notNull(), // upper | lower | custom
+  orderIndex: integer('order_index').notNull().default(0),
+  dayOfWeek: integer('day_of_week'), // 0=Mon, 1=Tue, ..., 6=Sun (nullable for backwards compat)
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
 });
 
@@ -59,6 +70,8 @@ export const userSettings = sqliteTable('user_settings', {
 });
 
 // Type exports
+export type WorkoutSplit = typeof workoutSplits.$inferSelect;
+export type NewWorkoutSplit = typeof workoutSplits.$inferInsert;
 export type Exercise = typeof exercises.$inferSelect;
 export type NewExercise = typeof exercises.$inferInsert;
 export type WorkoutTemplate = typeof workoutTemplates.$inferSelect;

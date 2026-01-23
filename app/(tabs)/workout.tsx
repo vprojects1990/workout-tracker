@@ -1,8 +1,8 @@
-import { useState } from 'react';
-import { StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
+import { useState, useCallback } from 'react';
+import { StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert } from 'react-native';
 import { Text, View } from '@/components/Themed';
-import { useWorkoutSplits, TemplateWithDetails, SplitWithTemplates } from '@/hooks/useWorkoutTemplates';
-import { useRouter } from 'expo-router';
+import { useWorkoutSplits, useWorkoutMutations, TemplateWithDetails, SplitWithTemplates } from '@/hooks/useWorkoutTemplates';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from '@/components/useColorScheme';
 
@@ -20,6 +20,8 @@ function formatLastPerformed(date: Date | null): string {
   return `${Math.floor(diffDays / 30)} months ago`;
 }
 
+const DAY_ABBREVIATIONS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
 function TemplateCard({ template }: { template: TemplateWithDetails }) {
   const router = useRouter();
 
@@ -27,10 +29,19 @@ function TemplateCard({ template }: { template: TemplateWithDetails }) {
     router.push(`/workout/${template.id}`);
   };
 
+  const dayBadge = template.dayOfWeek !== null ? DAY_ABBREVIATIONS[template.dayOfWeek] : null;
+
   return (
     <Pressable style={styles.templateCard} onPress={handlePress}>
       <View style={styles.templateContent}>
-        <Text style={styles.templateName}>{template.name}</Text>
+        <View style={styles.templateNameRow}>
+          {dayBadge && (
+            <View style={styles.dayBadge}>
+              <Text style={styles.dayBadgeText}>{dayBadge}</Text>
+            </View>
+          )}
+          <Text style={styles.templateName}>{template.name}</Text>
+        </View>
         <Text style={styles.templateMeta}>{template.exerciseCount} exercises</Text>
       </View>
       <Text style={styles.templateLastDone}>Last: {formatLastPerformed(template.lastPerformed)}</Text>
@@ -38,26 +49,42 @@ function TemplateCard({ template }: { template: TemplateWithDetails }) {
   );
 }
 
-function SplitContainer({ split }: { split: SplitWithTemplates }) {
+function SplitContainer({ split, onDelete }: { split: SplitWithTemplates; onDelete: (id: string) => void }) {
   const [expanded, setExpanded] = useState(true);
   const colorScheme = useColorScheme();
   const iconColor = colorScheme === 'dark' ? '#fff' : '#000';
 
+  const handleDelete = () => {
+    Alert.alert(
+      'Delete Split',
+      `Are you sure you want to delete "${split.name}"? This will also delete all templates and exercises in this split.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => onDelete(split.id) },
+      ]
+    );
+  };
+
   return (
     <View style={styles.splitContainer}>
-      <Pressable style={styles.splitHeader} onPress={() => setExpanded(!expanded)}>
-        <View style={styles.splitTitleContainer}>
-          <Text style={styles.splitName}>{split.name}</Text>
-          {split.description && (
-            <Text style={styles.splitDescription}>{split.description}</Text>
-          )}
-        </View>
-        <Ionicons
-          name={expanded ? 'chevron-up' : 'chevron-down'}
-          size={24}
-          color={iconColor}
-        />
-      </Pressable>
+      <View style={styles.splitHeader}>
+        <Pressable style={styles.splitTitlePressable} onPress={() => setExpanded(!expanded)}>
+          <View style={styles.splitTitleContainer}>
+            <Text style={styles.splitName}>{split.name}</Text>
+            {split.description && (
+              <Text style={styles.splitDescription}>{split.description}</Text>
+            )}
+          </View>
+          <Ionicons
+            name={expanded ? 'chevron-up' : 'chevron-down'}
+            size={24}
+            color={iconColor}
+          />
+        </Pressable>
+        <Pressable onPress={handleDelete} style={styles.deleteButton}>
+          <Ionicons name="trash-outline" size={20} color="#ff4444" />
+        </Pressable>
+      </View>
 
       {expanded && (
         <View style={styles.templatesContainer}>
@@ -74,7 +101,25 @@ export default function WorkoutScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
   const iconColor = colorScheme === 'dark' ? '#fff' : '#000';
-  const { splits, standaloneTemplates, loading, error } = useWorkoutSplits();
+  const { splits, standaloneTemplates, loading, error, refetch } = useWorkoutSplits();
+  const { deleteWorkoutSplit } = useWorkoutMutations();
+
+  // Refetch data when screen comes into focus (e.g., after creating a new split)
+  useFocusEffect(
+    useCallback(() => {
+      refetch();
+    }, [refetch])
+  );
+
+  const handleDeleteSplit = async (splitId: string) => {
+    try {
+      await deleteWorkoutSplit(splitId);
+      refetch();
+    } catch (e) {
+      Alert.alert('Error', 'Failed to delete split. Please try again.');
+      console.error('Error deleting split:', e);
+    }
+  };
 
   if (loading) {
     return (
@@ -124,7 +169,7 @@ export default function WorkoutScreen() {
 
       {/* Workout Splits */}
       {splits.map(split => (
-        <SplitContainer key={split.id} split={split} />
+        <SplitContainer key={split.id} split={split} onDelete={handleDeleteSplit} />
       ))}
 
       {/* Standalone Templates (if any) */}
@@ -228,14 +273,25 @@ const styles = StyleSheet.create({
   },
   splitHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     padding: 16,
+    paddingRight: 8,
+    backgroundColor: 'transparent',
+  },
+  splitTitlePressable: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     backgroundColor: 'transparent',
   },
   splitTitleContainer: {
     flex: 1,
     backgroundColor: 'transparent',
+  },
+  deleteButton: {
+    padding: 8,
+    marginLeft: 8,
   },
   splitName: {
     fontSize: 18,
@@ -262,10 +318,29 @@ const styles = StyleSheet.create({
   },
   templateContent: {
     backgroundColor: 'transparent',
+    flex: 1,
+  },
+  templateNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'transparent',
+  },
+  dayBadge: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  dayBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '600',
   },
   templateName: {
     fontSize: 16,
     fontWeight: '600',
+    flex: 1,
   },
   templateMeta: {
     fontSize: 13,

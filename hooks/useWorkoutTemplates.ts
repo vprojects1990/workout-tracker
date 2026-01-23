@@ -10,6 +10,7 @@ export type TemplateWithDetails = {
   exerciseCount: number;
   lastPerformed: Date | null;
   orderIndex: number;
+  dayOfWeek: number | null;
 };
 
 export type SplitWithTemplates = {
@@ -56,6 +57,7 @@ export function useWorkoutSplits() {
             name: template.name,
             type: template.type,
             orderIndex: template.orderIndex,
+            dayOfWeek: template.dayOfWeek,
             exerciseCount: exerciseList.length,
             lastPerformed: lastSession[0]?.completedAt || null,
           };
@@ -126,6 +128,7 @@ export function useWorkoutTemplates() {
             name: template.name,
             type: template.type,
             orderIndex: template.orderIndex,
+            dayOfWeek: template.dayOfWeek,
             exerciseCount: exerciseList.length,
             lastPerformed: lastSession[0]?.completedAt || null,
           };
@@ -269,7 +272,8 @@ export function useWorkoutMutations() {
     splitId: string,
     name: string,
     type: string,
-    orderIndex: number
+    orderIndex: number,
+    dayOfWeek?: number
   ): Promise<string> {
     const id = 'template-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
     await db.insert(workoutTemplates).values({
@@ -278,6 +282,7 @@ export function useWorkoutMutations() {
       name,
       type,
       orderIndex,
+      dayOfWeek: dayOfWeek ?? null,
       createdAt: new Date(),
     });
     return id;
@@ -334,10 +339,80 @@ export function useWorkoutMutations() {
     });
   }
 
+  // Create a full split with workout days and exercises in a single transaction
+  type WorkoutDayInput = {
+    id: string;
+    dayOfWeek: number;
+    suffix: string;
+    displayName: string;
+  };
+
+  type ExerciseInput = {
+    exerciseId: string;
+    targetSets: number;
+    targetRepMin: number;
+    targetRepMax: number;
+  };
+
+  async function createFullSplit(
+    splitName: string,
+    splitDescription: string | undefined,
+    workoutDays: WorkoutDayInput[],
+    dayExercises: Map<string, ExerciseInput[]>
+  ): Promise<string> {
+    const splitId = 'split-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+
+    await db.transaction(async (tx) => {
+      // Create the split
+      await tx.insert(workoutSplits).values({
+        id: splitId,
+        name: splitName,
+        description: splitDescription ?? null,
+        createdAt: new Date(),
+      });
+
+      // Create templates for each workout day
+      for (let i = 0; i < workoutDays.length; i++) {
+        const day = workoutDays[i];
+        const templateId = 'template-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9) + '-' + i;
+
+        await tx.insert(workoutTemplates).values({
+          id: templateId,
+          splitId,
+          name: day.displayName,
+          type: 'custom',
+          orderIndex: i,
+          dayOfWeek: day.dayOfWeek,
+          createdAt: new Date(),
+        });
+
+        // Add exercises for this template
+        const exercisesForDay = dayExercises.get(day.id) || [];
+        for (let j = 0; j < exercisesForDay.length; j++) {
+          const exercise = exercisesForDay[j];
+          const exerciseTemplateId = 'texercise-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9) + '-' + i + '-' + j;
+
+          await tx.insert(templateExercises).values({
+            id: exerciseTemplateId,
+            templateId,
+            exerciseId: exercise.exerciseId,
+            orderIndex: j,
+            targetSets: exercise.targetSets,
+            targetRepMin: exercise.targetRepMin,
+            targetRepMax: exercise.targetRepMax,
+          });
+        }
+      }
+    });
+
+    return splitId;
+  }
+
   return {
     createWorkoutSplit,
     createWorkoutTemplate,
     addTemplateExercise,
     deleteWorkoutSplit,
+    createFullSplit,
   };
 }
