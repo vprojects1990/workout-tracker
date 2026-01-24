@@ -1,13 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
-import { StyleSheet, ScrollView, Pressable, TextInput, Modal, FlatList, KeyboardAvoidingView, Platform } from 'react-native';
-import { Text, View } from '@/components/Themed';
+import { StyleSheet, ScrollView, Pressable, TextInput, Modal, FlatList, KeyboardAvoidingView, Platform, View as RNView } from 'react-native';
+import { Text, View, useColors } from '@/components/Themed';
 import { useRouter } from 'expo-router';
 import { useColorScheme } from '@/components/useColorScheme';
-import { useSettings, convertWeight, convertToKg } from '@/hooks/useSettings';
+import { useSettings, convertWeight, convertToKg, WeightUnit } from '@/hooks/useSettings';
 import { useAllExercises } from '@/hooks/useWorkoutTemplates';
 import { Ionicons } from '@expo/vector-icons';
 import { db } from '@/db';
 import { workoutSessions, setLogs } from '@/db/schema';
+import { Audio } from 'expo-av';
+import * as Haptics from 'expo-haptics';
 
 const EQUIPMENT_LABELS: Record<string, string> = {
   barbell: 'Barbell',
@@ -23,6 +25,7 @@ const MUSCLE_LABELS: Record<string, string> = {
   shoulders: 'Shoulders',
   biceps: 'Biceps',
   triceps: 'Triceps',
+  forearms: 'Forearms',
   quads: 'Quads',
   hamstrings: 'Hamstrings',
   glutes: 'Glutes',
@@ -54,6 +57,7 @@ function formatTime(seconds: number): string {
 export default function EmptyWorkoutScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
+  const colors = useColors();
   const iconColor = colorScheme === 'dark' ? '#fff' : '#000';
   const { settings } = useSettings();
   const { exercises: allExercises } = useAllExercises();
@@ -64,17 +68,20 @@ export default function EmptyWorkoutScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isComplete, setIsComplete] = useState(false);
   const [restSeconds, setRestSeconds] = useState<number | null>(null);
+  const [showRestOverlay, setShowRestOverlay] = useState(false);
 
   const sessionIdRef = useRef<string | null>(null);
   const startTimeRef = useRef<Date>(new Date());
+  const soundRef = useRef<Audio.Sound | null>(null);
 
   // Timer effect
   useEffect(() => {
+    if (isComplete) return;
     const interval = setInterval(() => {
       setElapsedSeconds(Math.floor((Date.now() - startTimeRef.current.getTime()) / 1000));
     }, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [isComplete]);
 
   // Rest timer effect
   useEffect(() => {
@@ -83,6 +90,30 @@ export default function EmptyWorkoutScreen() {
       setRestSeconds(prev => (prev !== null && prev > 0 ? prev - 1 : null));
     }, 1000);
     return () => clearInterval(interval);
+  }, [restSeconds]);
+
+  // Load sound effect
+  useEffect(() => {
+    const loadSound = async () => {
+      const { sound } = await Audio.Sound.createAsync(
+        require('@/assets/sounds/timer-complete.mp3')
+      );
+      soundRef.current = sound;
+    };
+    loadSound();
+    return () => {
+      soundRef.current?.unloadAsync();
+    };
+  }, []);
+
+  // Timer completion effect
+  useEffect(() => {
+    if (restSeconds === 0) {
+      soundRef.current?.replayAsync();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setRestSeconds(null);
+      setShowRestOverlay(false);
+    }
   }, [restSeconds]);
 
   const addExercise = (exercise: { id: string; name: string; equipment: string }) => {
@@ -124,18 +155,20 @@ export default function EmptyWorkoutScreen() {
   };
 
   const completeSet = (exerciseId: string, setNumber: number, reps: number, weight: number) => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setWorkoutExercises(prev => prev.map(ex => {
       if (ex.id !== exerciseId) return ex;
       return {
         ...ex,
         sets: ex.sets.map(s =>
           s.setNumber === setNumber
-            ? { ...s, reps, weight: convertToKg(weight, settings.weightUnit), completed: true }
+            ? { ...s, reps, weight: convertToKg(weight, settings.weightUnit as WeightUnit), completed: true }
             : s
         ),
       };
     }));
     setRestSeconds(settings.defaultRestSeconds);
+    setShowRestOverlay(true);
   };
 
   const completeWorkout = async () => {
@@ -210,13 +243,23 @@ export default function EmptyWorkoutScreen() {
         </Pressable>
       </View>
 
-      {restSeconds !== null && restSeconds > 0 && (
-        <Pressable style={styles.restOverlay} onPress={() => setRestSeconds(null)}>
-          <View style={styles.restCard}>
+      {restSeconds !== null && restSeconds > 0 && showRestOverlay && (
+        <Pressable style={styles.restOverlay} onPress={() => setShowRestOverlay(false)}>
+          <RNView style={styles.restCard}>
             <Text style={styles.restTitle}>Rest</Text>
             <Text style={styles.restTime}>{formatTime(restSeconds)}</Text>
             <Text style={styles.restTap}>Tap to dismiss</Text>
-          </View>
+          </RNView>
+        </Pressable>
+      )}
+
+      {restSeconds !== null && restSeconds > 0 && !showRestOverlay && (
+        <Pressable
+          style={[styles.miniTimerBadge, { backgroundColor: colors.cardElevated }]}
+          onPress={() => setShowRestOverlay(true)}
+        >
+          <Ionicons name="timer-outline" size={16} color={colors.success} />
+          <Text style={[styles.miniTimerText, { color: colors.success }]}>{formatTime(restSeconds)}</Text>
         </Pressable>
       )}
 
@@ -230,7 +273,7 @@ export default function EmptyWorkoutScreen() {
             <ExerciseCard
               key={exercise.id}
               exercise={exercise}
-              weightUnit={settings.weightUnit}
+              weightUnit={settings.weightUnit as WeightUnit}
               onRemoveExercise={() => removeExercise(exercise.id)}
               onAddSet={() => addSet(exercise.id)}
               onRemoveSet={(setNumber) => removeSet(exercise.id, setNumber)}
@@ -303,7 +346,7 @@ function ExerciseCard({
   onCompleteSet,
 }: {
   exercise: WorkoutExercise;
-  weightUnit: string;
+  weightUnit: WeightUnit;
   onRemoveExercise: () => void;
   onAddSet: () => void;
   onRemoveSet: (setNumber: number) => void;
@@ -358,7 +401,7 @@ function SetRow({
   colorScheme,
 }: {
   set: SetData;
-  weightUnit: string;
+  weightUnit: WeightUnit;
   onComplete: (reps: number, weight: number) => void;
   onRemove: () => void;
   colorScheme: string | null | undefined;
@@ -379,7 +422,7 @@ function SetRow({
     return (
       <View style={styles.setRow}>
         <Text style={styles.setNumber}>{set.setNumber}</Text>
-        <Text style={styles.setWeight}>{set.weight !== null ? convertWeight(set.weight, weightUnit as 'kg' | 'lbs') : '-'}</Text>
+        <Text style={styles.setWeight}>{set.weight !== null ? convertWeight(set.weight, weightUnit) : '-'}</Text>
         <Text style={styles.setReps}>{set.reps}</Text>
         <Text style={styles.checkmark}>✓</Text>
       </View>
@@ -570,4 +613,26 @@ const styles = StyleSheet.create({
   restTitle: { fontSize: 24, fontWeight: '600', color: '#fff' },
   restTime: { fontSize: 64, fontWeight: 'bold', color: '#4CAF50', marginVertical: 20 },
   restTap: { fontSize: 14, color: '#999' },
+  // Mini timer badge
+  miniTimerBadge: {
+    position: 'absolute',
+    bottom: 100,
+    right: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+    zIndex: 50,
+  },
+  miniTimerText: {
+    fontWeight: '600',
+    fontSize: 14,
+  },
 });

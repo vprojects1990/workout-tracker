@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "gym-track",
+    "name": "Workout Tracker",
     "slug": "gym-track",
-    "version": "1.0.0",
+    "version": "0.5.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "gymtrack",
@@ -17,6 +17,7 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.gymtrack.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -35,6 +36,13 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "d56f816f-d776-40af-addb-7b8f634351c4"
+      }
+    },
+    "owner": "vira4783"
   }
 }

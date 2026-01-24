@@ -1,13 +1,15 @@
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { DarkTheme, DefaultTheme, ThemeProvider as NavigationThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { useColorScheme } from '@/components/useColorScheme';
 import { DatabaseProvider, useDatabase } from '@/contexts/DatabaseContext';
+import { ThemeProvider } from '@/contexts/ThemeContext';
 import { View, Text } from '@/components/Themed';
 
 export {
@@ -41,14 +43,16 @@ export default function RootLayout() {
   }
 
   return (
-    <DatabaseProvider>
-      <RootLayoutNav />
-    </DatabaseProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <DatabaseProvider>
+        <DatabaseReadyGate />
+      </DatabaseProvider>
+    </GestureHandlerRootView>
   );
 }
 
-function RootLayoutNav() {
-  const colorScheme = useColorScheme();
+// This component waits for the database to be ready before rendering ThemeProvider
+function DatabaseReadyGate() {
   const { isReady, error } = useDatabase();
 
   if (error) {
@@ -67,8 +71,19 @@ function RootLayoutNav() {
     );
   }
 
+  // Database is ready, now we can use ThemeProvider which accesses the database
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+    <ThemeProvider>
+      <RootLayoutNav />
+    </ThemeProvider>
+  );
+}
+
+function RootLayoutNav() {
+  const colorScheme = useColorScheme();
+
+  return (
+    <NavigationThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
@@ -101,6 +116,6 @@ function RootLayoutNav() {
           }}
         />
       </Stack>
-    </ThemeProvider>
+    </NavigationThemeProvider>
   );
 }

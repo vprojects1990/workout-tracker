@@ -9,13 +9,16 @@ import {
   Platform,
   Alert,
 } from 'react-native';
-import { Text, View } from '@/components/Themed';
+import { Text, View, useColors } from '@/components/Themed';
 import { useRouter } from 'expo-router';
 import { useAllExercises, useWorkoutMutations } from '@/hooks/useWorkoutTemplates';
-import { useColorScheme } from '@/components/useColorScheme';
 import { Ionicons } from '@expo/vector-icons';
 import { StepIndicator } from '@/components/wizard/StepIndicator';
 import { DayPicker, WorkoutDay } from '@/components/wizard/DayPicker';
+import * as Haptics from 'expo-haptics';
+import { Card, Button, Badge } from '@/components/ui';
+import { Typography } from '@/constants/Typography';
+import { Spacing, Radius } from '@/constants/Spacing';
 
 const MUSCLE_LABELS: Record<string, string> = {
   chest: 'Chest',
@@ -23,6 +26,7 @@ const MUSCLE_LABELS: Record<string, string> = {
   shoulders: 'Shoulders',
   biceps: 'Biceps',
   triceps: 'Triceps',
+  forearms: 'Forearms',
   quads: 'Quads',
   hamstrings: 'Hamstrings',
   glutes: 'Glutes',
@@ -52,9 +56,7 @@ const WIZARD_STEPS = ['Details', 'Days', 'Exercises'];
 
 export default function CreateSplitScreen() {
   const router = useRouter();
-  const colorScheme = useColorScheme();
-  const iconColor = colorScheme === 'dark' ? '#fff' : '#000';
-  const inputStyle = colorScheme === 'dark' ? styles.inputDark : styles.inputLight;
+  const colors = useColors();
 
   const { exercises: allExercises, loading: exercisesLoading } = useAllExercises();
   const { createFullSplit } = useWorkoutMutations();
@@ -87,12 +89,13 @@ export default function CreateSplitScreen() {
 
   // Day management
   const handleAddDay = (day: WorkoutDay) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setWorkoutDays([...workoutDays, day]);
-    // Initialize empty exercise list for this day
     setDayExercises(new Map(dayExercises).set(day.id, []));
   };
 
   const handleRemoveDay = (dayId: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setWorkoutDays(workoutDays.filter(d => d.id !== dayId));
     const newMap = new Map(dayExercises);
     newMap.delete(dayId);
@@ -105,6 +108,7 @@ export default function CreateSplitScreen() {
   // Exercise management for selected day
   const addExercise = (exercise: { id: string; name: string; equipment: string }) => {
     if (!selectedDayId) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
     const newExercise: Exercise = {
       id: `exercise-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -124,6 +128,7 @@ export default function CreateSplitScreen() {
 
   const removeExercise = (exerciseId: string) => {
     if (!selectedDayId) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     const currentExercises = dayExercises.get(selectedDayId) || [];
     setDayExercises(
@@ -158,9 +163,9 @@ export default function CreateSplitScreen() {
     }
 
     setSaving(true);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
     try {
-      // Convert Exercise[] to ExerciseInput[] format expected by createFullSplit
       const exerciseInputMap = new Map<string, Array<{
         exerciseId: string;
         targetSets: number;
@@ -215,8 +220,8 @@ export default function CreateSplitScreen() {
 
   // Auto-select first day when entering step 3
   const handleGoToStep3 = () => {
+    Haptics.selectionAsync();
     if (workoutDays.length > 0 && !selectedDayId) {
-      // Sort by dayOfWeek and select first
       const sorted = [...workoutDays].sort((a, b) => a.dayOfWeek - b.dayOfWeek);
       setSelectedDayId(sorted[0].id);
     }
@@ -229,14 +234,17 @@ export default function CreateSplitScreen() {
       return (
         <>
           <Pressable onPress={() => router.back()} style={styles.headerButton}>
-            <Text style={styles.cancelText}>Cancel</Text>
+            <Text style={[styles.cancelText, { color: colors.error }]}>Cancel</Text>
           </Pressable>
           <Pressable
-            onPress={() => setCurrentStep(2)}
+            onPress={() => {
+              Haptics.selectionAsync();
+              setCurrentStep(2);
+            }}
             style={styles.headerButton}
             disabled={!canGoToStep2}
           >
-            <Text style={[styles.nextText, !canGoToStep2 && styles.nextTextDisabled]}>
+            <Text style={[styles.nextText, { color: colors.primary }, !canGoToStep2 && styles.textDisabled]}>
               Next
             </Text>
           </Pressable>
@@ -245,15 +253,21 @@ export default function CreateSplitScreen() {
     } else if (currentStep === 2) {
       return (
         <>
-          <Pressable onPress={() => setCurrentStep(1)} style={styles.headerButton}>
-            <Text style={styles.backText}>Back</Text>
+          <Pressable
+            onPress={() => {
+              Haptics.selectionAsync();
+              setCurrentStep(1);
+            }}
+            style={styles.headerButton}
+          >
+            <Text style={[styles.backText, { color: colors.primary }]}>Back</Text>
           </Pressable>
           <Pressable
             onPress={handleGoToStep3}
             style={styles.headerButton}
             disabled={!canGoToStep3}
           >
-            <Text style={[styles.nextText, !canGoToStep3 && styles.nextTextDisabled]}>
+            <Text style={[styles.nextText, { color: colors.primary }, !canGoToStep3 && styles.textDisabled]}>
               Next
             </Text>
           </Pressable>
@@ -262,15 +276,21 @@ export default function CreateSplitScreen() {
     } else {
       return (
         <>
-          <Pressable onPress={() => setCurrentStep(2)} style={styles.headerButton}>
-            <Text style={styles.backText}>Back</Text>
+          <Pressable
+            onPress={() => {
+              Haptics.selectionAsync();
+              setCurrentStep(2);
+            }}
+            style={styles.headerButton}
+          >
+            <Text style={[styles.backText, { color: colors.primary }]}>Back</Text>
           </Pressable>
           <Pressable
             onPress={handleSave}
             style={styles.headerButton}
             disabled={saving || !canSave}
           >
-            <Text style={[styles.saveText, (saving || !canSave) && styles.saveTextDisabled]}>
+            <Text style={[styles.saveText, { color: colors.success }, (saving || !canSave) && styles.textDisabled]}>
               {saving ? 'Saving...' : 'Save'}
             </Text>
           </Pressable>
@@ -285,24 +305,24 @@ export default function CreateSplitScreen() {
       return (
         <>
           <View style={styles.section}>
-            <Text style={styles.inputLabel}>Split Name *</Text>
+            <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Split Name *</Text>
             <TextInput
-              style={[styles.input, inputStyle]}
+              style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text }]}
               value={splitName}
               onChangeText={setSplitName}
               placeholder="e.g., Push/Pull/Legs"
-              placeholderTextColor="#999"
+              placeholderTextColor={colors.textTertiary}
             />
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.inputLabel}>Description (optional)</Text>
+            <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Description (optional)</Text>
             <TextInput
-              style={[styles.input, inputStyle]}
+              style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text }]}
               value={splitDescription}
               onChangeText={setSplitDescription}
               placeholder="e.g., 3-day split for strength"
-              placeholderTextColor="#999"
+              placeholderTextColor={colors.textTertiary}
             />
           </View>
         </>
@@ -310,8 +330,8 @@ export default function CreateSplitScreen() {
     } else if (currentStep === 2) {
       return (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Select Workout Days</Text>
-          <Text style={styles.sectionSubtitle}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Select Workout Days</Text>
+          <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
             Tap a day to add it to your split
           </Text>
           <DayPicker
@@ -322,7 +342,6 @@ export default function CreateSplitScreen() {
         </View>
       );
     } else {
-      // Sort workout days by dayOfWeek for tab display
       const sortedDays = [...workoutDays].sort((a, b) => a.dayOfWeek - b.dayOfWeek);
 
       return (
@@ -331,7 +350,7 @@ export default function CreateSplitScreen() {
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            style={styles.dayTabsContainer}
+            style={[styles.dayTabsContainer, { borderBottomColor: colors.separator }]}
             contentContainerStyle={styles.dayTabsContent}
           >
             {sortedDays.map(day => {
@@ -342,17 +361,22 @@ export default function CreateSplitScreen() {
               return (
                 <Pressable
                   key={day.id}
-                  style={[styles.dayTab, isSelected && styles.dayTabSelected]}
-                  onPress={() => setSelectedDayId(day.id)}
+                  style={[
+                    styles.dayTab,
+                    { backgroundColor: isSelected ? colors.primary : colors.backgroundSecondary }
+                  ]}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    setSelectedDayId(day.id);
+                  }}
                 >
-                  <Text style={[styles.dayTabText, isSelected && styles.dayTabTextSelected]}>
+                  <Text style={[styles.dayTabText, { color: isSelected ? '#fff' : colors.text }]}>
                     {day.displayName}
                   </Text>
                   <Text
                     style={[
                       styles.dayTabCount,
-                      isSelected && styles.dayTabCountSelected,
-                      !hasExercises && styles.dayTabCountEmpty,
+                      { color: isSelected ? 'rgba(255,255,255,0.8)' : (hasExercises ? colors.textTertiary : colors.error) }
                     ]}
                   >
                     {exerciseCount} {exerciseCount === 1 ? 'exercise' : 'exercises'}
@@ -365,22 +389,27 @@ export default function CreateSplitScreen() {
           {/* Exercise list for selected day */}
           {selectedDay && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>{selectedDay.displayName}</Text>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>{selectedDay.displayName}</Text>
 
               {selectedDayExercises.map(exercise => (
-                <View key={exercise.id} style={styles.exerciseCard}>
+                <Card key={exercise.id} variant="filled" style={styles.exerciseCard} padding="md">
                   <View style={styles.exerciseHeader}>
-                    <Text style={styles.exerciseName}>{exercise.name}</Text>
+                    <View style={styles.exerciseNameContainer}>
+                      <Text style={[styles.exerciseName, { color: colors.text }]}>{exercise.name}</Text>
+                      <Text style={[styles.exerciseEquipment, { color: colors.textTertiary }]}>
+                        {EQUIPMENT_LABELS[exercise.equipment]}
+                      </Text>
+                    </View>
                     <Pressable
                       onPress={() => removeExercise(exercise.id)}
                       style={styles.removeButton}
                     >
-                      <Ionicons name="remove-circle" size={24} color="#ff4444" />
+                      <Ionicons name="trash-outline" size={20} color={colors.error} />
                     </Pressable>
                   </View>
                   <View style={styles.setsRepsRow}>
                     <TextInput
-                      style={[styles.smallInput, inputStyle]}
+                      style={[styles.smallInput, { backgroundColor: colors.inputBackground, color: colors.text }]}
                       value={exercise.targetSets.toString()}
                       onChangeText={(text) => {
                         const num = parseInt(text, 10);
@@ -390,11 +419,11 @@ export default function CreateSplitScreen() {
                       }}
                       keyboardType="number-pad"
                       placeholder="Sets"
-                      placeholderTextColor="#999"
+                      placeholderTextColor={colors.textTertiary}
                     />
-                    <Text style={styles.setsRepsLabel}>sets ×</Text>
+                    <Text style={[styles.setsRepsLabel, { color: colors.textSecondary }]}>sets ×</Text>
                     <TextInput
-                      style={[styles.smallInput, inputStyle]}
+                      style={[styles.smallInput, { backgroundColor: colors.inputBackground, color: colors.text }]}
                       value={exercise.targetRepMin.toString()}
                       onChangeText={(text) => {
                         const num = parseInt(text, 10);
@@ -404,11 +433,11 @@ export default function CreateSplitScreen() {
                       }}
                       keyboardType="number-pad"
                       placeholder="Min"
-                      placeholderTextColor="#999"
+                      placeholderTextColor={colors.textTertiary}
                     />
-                    <Text style={styles.setsRepsLabel}>-</Text>
+                    <Text style={[styles.setsRepsLabel, { color: colors.textSecondary }]}>-</Text>
                     <TextInput
-                      style={[styles.smallInput, inputStyle]}
+                      style={[styles.smallInput, { backgroundColor: colors.inputBackground, color: colors.text }]}
                       value={exercise.targetRepMax.toString()}
                       onChangeText={(text) => {
                         const num = parseInt(text, 10);
@@ -418,19 +447,22 @@ export default function CreateSplitScreen() {
                       }}
                       keyboardType="number-pad"
                       placeholder="Max"
-                      placeholderTextColor="#999"
+                      placeholderTextColor={colors.textTertiary}
                     />
-                    <Text style={styles.setsRepsLabel}>reps</Text>
+                    <Text style={[styles.setsRepsLabel, { color: colors.textSecondary }]}>reps</Text>
                   </View>
-                </View>
+                </Card>
               ))}
 
               <Pressable
-                style={styles.addExerciseButton}
-                onPress={() => setShowExercisePicker(true)}
+                style={[styles.addExerciseButton, { backgroundColor: colors.primary + '15' }]}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setShowExercisePicker(true);
+                }}
               >
-                <Ionicons name="add-circle-outline" size={24} color="#007AFF" />
-                <Text style={styles.addExerciseText}>Add Exercise</Text>
+                <Ionicons name="add-circle-outline" size={24} color={colors.primary} />
+                <Text style={[styles.addExerciseText, { color: colors.primary }]}>Add Exercise</Text>
               </Pressable>
             </View>
           )}
@@ -440,9 +472,9 @@ export default function CreateSplitScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { borderBottomColor: colors.separator }]}>
         {renderHeaderButtons()}
       </View>
 
@@ -467,37 +499,42 @@ export default function CreateSplitScreen() {
           style={{ flex: 1 }}
           keyboardVerticalOffset={0}
         >
-          <View style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Add Exercise</Text>
+          <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
+            <View style={[styles.modalHeader, { borderBottomColor: colors.separator }]}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Add Exercise</Text>
               <Pressable onPress={() => { setShowExercisePicker(false); setSearchQuery(''); }}>
-                <Ionicons name="close" size={28} color={iconColor} />
+                <Ionicons name="close-circle-outline" size={28} color={colors.textSecondary} />
               </Pressable>
             </View>
 
-            <TextInput
-              style={[styles.searchInput, inputStyle]}
-              placeholder="Search exercises..."
-              placeholderTextColor="#999"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-            />
+            <View style={styles.searchContainer}>
+              <Ionicons name="search" size={20} color={colors.textTertiary} style={styles.searchIcon} />
+              <TextInput
+                style={[styles.searchInput, { backgroundColor: colors.inputBackground, color: colors.text }]}
+                placeholder="Search exercises..."
+                placeholderTextColor={colors.textTertiary}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+              />
+            </View>
 
             <ScrollView style={styles.exerciseList} keyboardShouldPersistTaps="handled">
               {exercisesLoading ? (
-                <Text style={styles.loadingText}>Loading exercises...</Text>
+                <Text style={[styles.loadingText, { color: colors.textTertiary }]}>Loading exercises...</Text>
               ) : (
                 Object.entries(groupedExercises).map(([muscle, muscleExercises]) => (
                   <View key={muscle} style={styles.muscleGroup}>
-                    <Text style={styles.muscleTitle}>{MUSCLE_LABELS[muscle] || muscle}</Text>
+                    <Text style={[styles.muscleTitle, { color: colors.textTertiary }]}>
+                      {MUSCLE_LABELS[muscle] || muscle}
+                    </Text>
                     {muscleExercises.map(ex => (
                       <Pressable
                         key={ex.id}
-                        style={styles.exerciseItem}
+                        style={[styles.exerciseItem, { borderBottomColor: colors.separator }]}
                         onPress={() => addExercise(ex)}
                       >
-                        <Text style={styles.exerciseItemName}>{ex.name}</Text>
-                        <Text style={styles.exerciseItemEquipment}>
+                        <Text style={[styles.exerciseItemName, { color: colors.text }]}>{ex.name}</Text>
+                        <Text style={[styles.exerciseItemEquipment, { color: colors.textTertiary }]}>
                           {EQUIPMENT_LABELS[ex.equipment] || ex.equipment}
                         </Text>
                       </Pressable>
@@ -521,167 +558,130 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
+    padding: Spacing.lg,
     paddingTop: 60,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(128, 128, 128, 0.2)',
   },
   headerButton: {
-    padding: 4,
+    padding: Spacing.xs,
   },
   cancelText: {
-    color: '#ff4444',
-    fontSize: 16,
+    ...Typography.body,
   },
   backText: {
-    color: '#007AFF',
-    fontSize: 16,
+    ...Typography.body,
   },
   nextText: {
-    color: '#007AFF',
-    fontSize: 16,
+    ...Typography.body,
     fontWeight: '600',
-  },
-  nextTextDisabled: {
-    opacity: 0.4,
   },
   saveText: {
-    color: '#4CAF50',
-    fontSize: 16,
+    ...Typography.body,
     fontWeight: '600',
   },
-  saveTextDisabled: {
-    opacity: 0.5,
+  textDisabled: {
+    opacity: 0.4,
   },
   scrollView: {
     flex: 1,
   },
   section: {
-    padding: 20,
+    padding: Spacing.xl,
     paddingBottom: 0,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 8,
+    ...Typography.title3,
+    marginBottom: Spacing.sm,
   },
   sectionSubtitle: {
-    fontSize: 14,
-    opacity: 0.6,
-    marginBottom: 16,
+    ...Typography.subhead,
+    marginBottom: Spacing.lg,
   },
   inputLabel: {
-    fontSize: 14,
-    marginBottom: 8,
-    opacity: 0.7,
+    ...Typography.subhead,
+    marginBottom: Spacing.sm,
   },
   input: {
-    padding: 12,
-    borderRadius: 10,
-    fontSize: 16,
-  },
-  inputLight: {
-    backgroundColor: '#f0f0f0',
-    color: '#000',
-  },
-  inputDark: {
-    backgroundColor: '#333',
-    color: '#fff',
+    padding: Spacing.md,
+    borderRadius: Radius.medium,
+    ...Typography.body,
   },
   // Day tabs for step 3
   dayTabsContainer: {
     maxHeight: 80,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(128, 128, 128, 0.2)',
   },
   dayTabsContent: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 10,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    gap: Spacing.sm,
   },
   dayTab: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 10,
-    backgroundColor: 'rgba(128, 128, 128, 0.15)',
-    marginRight: 10,
-  },
-  dayTabSelected: {
-    backgroundColor: '#007AFF',
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.medium,
+    marginRight: Spacing.sm,
   },
   dayTabText: {
-    fontSize: 14,
+    ...Typography.subhead,
     fontWeight: '600',
   },
-  dayTabTextSelected: {
-    color: '#fff',
-  },
   dayTabCount: {
-    fontSize: 11,
-    opacity: 0.6,
+    ...Typography.caption2,
     marginTop: 2,
-  },
-  dayTabCountSelected: {
-    color: '#fff',
-    opacity: 0.8,
-  },
-  dayTabCountEmpty: {
-    color: '#ff4444',
-    opacity: 1,
   },
   // Exercise card styles
   exerciseCard: {
-    backgroundColor: 'rgba(128, 128, 128, 0.1)',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+    marginBottom: Spacing.md,
   },
   exerciseHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: Spacing.md,
+    backgroundColor: 'transparent',
+  },
+  exerciseNameContainer: {
+    flex: 1,
     backgroundColor: 'transparent',
   },
   exerciseName: {
-    fontSize: 16,
-    fontWeight: '600',
-    flex: 1,
+    ...Typography.headline,
+  },
+  exerciseEquipment: {
+    ...Typography.footnote,
+    marginTop: 2,
   },
   removeButton: {
-    padding: 4,
+    padding: Spacing.xs,
   },
   setsRepsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: Spacing.sm,
     backgroundColor: 'transparent',
   },
   smallInput: {
     width: 48,
-    padding: 8,
-    borderRadius: 8,
-    fontSize: 16,
+    padding: Spacing.sm,
+    borderRadius: Radius.medium,
+    ...Typography.body,
     textAlign: 'center',
   },
   setsRepsLabel: {
-    fontSize: 14,
-    opacity: 0.6,
+    ...Typography.subhead,
   },
   addExerciseButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(0, 122, 255, 0.1)',
-    borderRadius: 12,
-    padding: 16,
-    gap: 8,
-    marginTop: 4,
+    borderRadius: Radius.large,
+    padding: Spacing.lg,
+    gap: Spacing.sm,
+    marginTop: Spacing.xs,
   },
   addExerciseText: {
-    color: '#007AFF',
-    fontSize: 16,
-    fontWeight: '600',
+    ...Typography.headline,
   },
   bottomPadding: {
     height: 100,
@@ -695,52 +695,59 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
+    padding: Spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(128, 128, 128, 0.2)',
   },
   modalTitle: {
-    fontSize: 20,
-    fontWeight: '600',
+    ...Typography.title2,
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    margin: Spacing.lg,
+  },
+  searchIcon: {
+    position: 'absolute',
+    left: Spacing.md,
+    zIndex: 1,
   },
   searchInput: {
-    margin: 16,
-    padding: 12,
-    borderRadius: 10,
-    fontSize: 16,
+    flex: 1,
+    padding: Spacing.md,
+    paddingLeft: 44,
+    borderRadius: Radius.medium,
+    ...Typography.body,
   },
   exerciseList: {
     flex: 1,
   },
   loadingText: {
     textAlign: 'center',
-    padding: 20,
-    opacity: 0.5,
+    padding: Spacing.xl,
+    ...Typography.body,
   },
   muscleGroup: {
-    marginBottom: 16,
+    marginBottom: Spacing.lg,
   },
   muscleTitle: {
-    fontSize: 14,
+    ...Typography.footnote,
     fontWeight: '600',
-    opacity: 0.5,
     textTransform: 'uppercase',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    letterSpacing: 0.5,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
   },
   exerciseItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(128, 128, 128, 0.1)',
+    padding: Spacing.lg,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   exerciseItemName: {
-    fontSize: 16,
+    ...Typography.body,
   },
   exerciseItemEquipment: {
-    fontSize: 14,
-    opacity: 0.5,
+    ...Typography.footnote,
   },
 });

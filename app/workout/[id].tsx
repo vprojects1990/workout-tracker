@@ -1,13 +1,18 @@
 import { useState, useEffect, useRef } from 'react';
-import { StyleSheet, ScrollView, Pressable, TextInput, Modal, KeyboardAvoidingView, Platform } from 'react-native';
-import { Text, View } from '@/components/Themed';
+import { StyleSheet, ScrollView, Pressable, TextInput, Modal, KeyboardAvoidingView, Platform, View as RNView } from 'react-native';
+import { Text, View, useColors } from '@/components/Themed';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useTemplateExercises, useAllExercises, TemplateExerciseWithDetails } from '@/hooks/useWorkoutTemplates';
-import { useColorScheme } from '@/components/useColorScheme';
-import { useSettings, convertWeight, convertToKg } from '@/hooks/useSettings';
+import { useTemplateExercises, useAllExercises } from '@/hooks/useWorkoutTemplates';
+import { useSettings, convertWeight, convertToKg, WeightUnit } from '@/hooks/useSettings';
 import { Ionicons } from '@expo/vector-icons';
 import { db } from '@/db';
 import { workoutSessions, setLogs } from '@/db/schema';
+import { BlurView } from 'expo-blur';
+import * as Haptics from 'expo-haptics';
+import { Audio } from 'expo-av';
+import { Card, Button, Badge, Input } from '@/components/ui';
+import { Typography } from '@/constants/Typography';
+import { Spacing, Radius } from '@/constants/Spacing';
 
 const EQUIPMENT_LABELS: Record<string, string> = {
   barbell: 'Barbell',
@@ -23,6 +28,7 @@ const MUSCLE_LABELS: Record<string, string> = {
   shoulders: 'Shoulders',
   biceps: 'Biceps',
   triceps: 'Triceps',
+  forearms: 'Forearms',
   quads: 'Quads',
   hamstrings: 'Hamstrings',
   glutes: 'Glutes',
@@ -35,7 +41,6 @@ type WorkoutExercise = {
   exerciseId: string;
   name: string;
   equipment: string;
-  lastWeight: number | null;
   sets: SetData[];
 };
 
@@ -55,8 +60,7 @@ function formatTime(seconds: number): string {
 export default function ActiveWorkoutScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const colorScheme = useColorScheme();
-  const iconColor = colorScheme === 'dark' ? '#fff' : '#000';
+  const colors = useColors();
   const { exercises: templateExercises, loading: exercisesLoading } = useTemplateExercises(id || null);
   const { exercises: allExercises } = useAllExercises();
   const { settings } = useSettings();
@@ -65,26 +69,26 @@ export default function ActiveWorkoutScreen() {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [isComplete, setIsComplete] = useState(false);
   const [restSeconds, setRestSeconds] = useState<number | null>(null);
+  const [showRestOverlay, setShowRestOverlay] = useState(false);
   const [showExercisePicker, setShowExercisePicker] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [initialized, setInitialized] = useState(false);
 
   const startTimeRef = useRef<Date>(new Date());
   const templateNameRef = useRef<string>('Workout');
+  const soundRef = useRef<Audio.Sound | null>(null);
 
-  const weightUnit = settings.weightUnit;
+  const weightUnit = settings.weightUnit as WeightUnit;
   const defaultRestSeconds = settings.defaultRestSeconds;
 
   // Initialize workout exercises from template
   useEffect(() => {
     if (!exercisesLoading && templateExercises.length > 0 && !initialized) {
-      // Get last weights for each exercise (simplified - would need actual DB query)
       const initialExercises: WorkoutExercise[] = templateExercises.map(ex => ({
         id: `${ex.exerciseId}-${Date.now()}-${Math.random()}`,
         exerciseId: ex.exerciseId,
         name: ex.name,
         equipment: ex.equipment,
-        lastWeight: null, // TODO: fetch from previous sessions
         sets: [{ setNumber: 1, reps: null, weight: null, completed: false }],
       }));
       setWorkoutExercises(initialExercises);
@@ -94,11 +98,12 @@ export default function ActiveWorkoutScreen() {
 
   // Timer effect
   useEffect(() => {
+    if (isComplete) return;
     const interval = setInterval(() => {
       setElapsedSeconds(Math.floor((Date.now() - startTimeRef.current.getTime()) / 1000));
     }, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [isComplete]);
 
   // Rest timer effect
   useEffect(() => {
@@ -109,13 +114,37 @@ export default function ActiveWorkoutScreen() {
     return () => clearInterval(interval);
   }, [restSeconds]);
 
+  // Load sound effect
+  useEffect(() => {
+    const loadSound = async () => {
+      const { sound } = await Audio.Sound.createAsync(
+        require('@/assets/sounds/timer-complete.mp3')
+      );
+      soundRef.current = sound;
+    };
+    loadSound();
+    return () => {
+      soundRef.current?.unloadAsync();
+    };
+  }, []);
+
+  // Timer completion effect
+  useEffect(() => {
+    if (restSeconds === 0) {
+      soundRef.current?.replayAsync();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setRestSeconds(null);
+      setShowRestOverlay(false);
+    }
+  }, [restSeconds]);
+
   const addExercise = (exercise: { id: string; name: string; equipment: string }) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const newExercise: WorkoutExercise = {
       id: `${exercise.id}-${Date.now()}`,
       exerciseId: exercise.id,
       name: exercise.name,
       equipment: exercise.equipment,
-      lastWeight: null,
       sets: [{ setNumber: 1, reps: null, weight: null, completed: false }],
     };
     setWorkoutExercises(prev => [...prev, newExercise]);
@@ -124,10 +153,12 @@ export default function ActiveWorkoutScreen() {
   };
 
   const removeExercise = (exerciseId: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setWorkoutExercises(prev => prev.filter(e => e.id !== exerciseId));
   };
 
   const addSet = (exerciseId: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setWorkoutExercises(prev => prev.map(ex => {
       if (ex.id !== exerciseId) return ex;
       const nextSetNumber = ex.sets.length + 1;
@@ -139,9 +170,10 @@ export default function ActiveWorkoutScreen() {
   };
 
   const removeSet = (exerciseId: string, setNumber: number) => {
+    Haptics.selectionAsync();
     setWorkoutExercises(prev => prev.map(ex => {
       if (ex.id !== exerciseId) return ex;
-      if (ex.sets.length <= 1) return ex; // Keep at least one set
+      if (ex.sets.length <= 1) return ex;
       const newSets = ex.sets
         .filter(s => s.setNumber !== setNumber)
         .map((s, idx) => ({ ...s, setNumber: idx + 1 }));
@@ -150,6 +182,7 @@ export default function ActiveWorkoutScreen() {
   };
 
   const completeSet = (exerciseId: string, setNumber: number, reps: number, weight: number) => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setWorkoutExercises(prev => prev.map(ex => {
       if (ex.id !== exerciseId) return ex;
       return {
@@ -162,9 +195,11 @@ export default function ActiveWorkoutScreen() {
       };
     }));
     setRestSeconds(defaultRestSeconds);
+    setShowRestOverlay(true);
   };
 
   const completeWorkout = async () => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     const sessionId = 'session-' + Date.now();
     const now = new Date();
 
@@ -210,46 +245,70 @@ export default function ActiveWorkoutScreen() {
 
   if (exercisesLoading) {
     return (
-      <View style={styles.loadingContainer}>
-        <Text>Loading...</Text>
+      <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
+        <Text style={{ color: colors.textSecondary }}>Loading...</Text>
       </View>
     );
   }
 
   if (isComplete) {
     return (
-      <View style={styles.completeContainer}>
-        <Text style={styles.completeTitle}>Workout Complete!</Text>
-        <Text style={styles.completeTime}>Duration: {formatTime(elapsedSeconds)}</Text>
-        <Text style={styles.completeStats}>
-          {workoutExercises.length} exercises, {workoutExercises.reduce((acc, ex) => acc + ex.sets.filter(s => s.completed).length, 0)} sets
+      <View style={[styles.completeContainer, { backgroundColor: colors.background }]}>
+        <View style={[styles.completeIconContainer, { backgroundColor: colors.success + '20' }]}>
+          <Ionicons name="checkmark-circle" size={64} color={colors.success} />
+        </View>
+        <Text style={[styles.completeTitle, { color: colors.text }]}>Workout Complete!</Text>
+        <Text style={[styles.completeTime, { color: colors.textSecondary }]}>
+          Duration: {formatTime(elapsedSeconds)}
         </Text>
-        <Pressable style={styles.doneButton} onPress={() => router.back()}>
-          <Text style={styles.doneButtonText}>Done</Text>
-        </Pressable>
+        <Text style={[styles.completeStats, { color: colors.textTertiary }]}>
+          {workoutExercises.length} exercises · {workoutExercises.reduce((acc, ex) => acc + ex.sets.filter(s => s.completed).length, 0)} sets
+        </Text>
+        <Button
+          title="Done"
+          onPress={() => router.back()}
+          variant="primary"
+          size="lg"
+          style={styles.doneButton}
+        />
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.header, { borderBottomColor: colors.separator }]}>
         <Pressable onPress={() => router.back()}>
-          <Text style={styles.cancelText}>Cancel</Text>
+          <Text style={[styles.cancelText, { color: colors.error }]}>Cancel</Text>
         </Pressable>
-        <Text style={styles.timer}>{formatTime(elapsedSeconds)}</Text>
+        <View style={[styles.timerContainer, { backgroundColor: colors.backgroundSecondary }]}>
+          <Ionicons name="time-outline" size={16} color={colors.textSecondary} />
+          <Text style={[styles.timer, { color: colors.text }]}>{formatTime(elapsedSeconds)}</Text>
+        </View>
         <Pressable onPress={completeWorkout}>
-          <Text style={styles.finishText}>Finish</Text>
+          <Text style={[styles.finishText, { color: colors.success }]}>Finish</Text>
         </Pressable>
       </View>
 
-      {restSeconds !== null && restSeconds > 0 && (
-        <Pressable style={styles.restOverlay} onPress={() => setRestSeconds(null)}>
-          <View style={styles.restCard}>
-            <Text style={styles.restTitle}>Rest</Text>
-            <Text style={styles.restTime}>{formatTime(restSeconds)}</Text>
-            <Text style={styles.restTap}>Tap to dismiss</Text>
-          </View>
+      {restSeconds !== null && restSeconds > 0 && showRestOverlay && (
+        <Pressable style={styles.restOverlay} onPress={() => setShowRestOverlay(false)}>
+          <BlurView intensity={90} tint="dark" style={styles.restBlur}>
+            <RNView style={[styles.restCard, { backgroundColor: colors.cardElevated }]}>
+              <Text style={[styles.restTitle, { color: colors.textTertiary }]}>Rest Timer</Text>
+              <Text style={[styles.restTime, { color: colors.success }]}>{formatTime(restSeconds)}</Text>
+              <Text style={[styles.restTap, { color: colors.textTertiary }]}>Tap anywhere to dismiss</Text>
+            </RNView>
+          </BlurView>
+        </Pressable>
+      )}
+
+      {restSeconds !== null && restSeconds > 0 && !showRestOverlay && (
+        <Pressable
+          style={[styles.miniTimerBadge, { backgroundColor: colors.cardElevated }]}
+          onPress={() => setShowRestOverlay(true)}
+        >
+          <Ionicons name="timer-outline" size={16} color={colors.success} />
+          <Text style={[styles.miniTimerText, { color: colors.success }]}>{formatTime(restSeconds)}</Text>
         </Pressable>
       )}
 
@@ -259,25 +318,32 @@ export default function ActiveWorkoutScreen() {
         keyboardVerticalOffset={100}
       >
         <ScrollView style={styles.scrollView} keyboardShouldPersistTaps="handled">
-        {workoutExercises.map(exercise => (
-          <ExerciseCard
-            key={exercise.id}
-            exercise={exercise}
-            weightUnit={weightUnit}
-            onRemoveExercise={() => removeExercise(exercise.id)}
-            onAddSet={() => addSet(exercise.id)}
-            onRemoveSet={(setNumber) => removeSet(exercise.id, setNumber)}
-            onCompleteSet={(setNumber, reps, weight) => completeSet(exercise.id, setNumber, reps, weight)}
-          />
-        ))}
+          {workoutExercises.map(exercise => (
+            <ExerciseCard
+              key={exercise.id}
+              exercise={exercise}
+              weightUnit={weightUnit}
+              colors={colors}
+              onRemoveExercise={() => removeExercise(exercise.id)}
+              onAddSet={() => addSet(exercise.id)}
+              onRemoveSet={(setNumber) => removeSet(exercise.id, setNumber)}
+              onCompleteSet={(setNumber, reps, weight) => completeSet(exercise.id, setNumber, reps, weight)}
+            />
+          ))}
 
-        <Pressable style={styles.addExerciseButton} onPress={() => setShowExercisePicker(true)}>
-          <Ionicons name="add" size={24} color="#007AFF" />
-          <Text style={styles.addExerciseText}>Add Exercise</Text>
-        </Pressable>
+          <Pressable
+            style={[styles.addExerciseButton, { backgroundColor: colors.primary + '15' }]}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setShowExercisePicker(true);
+            }}
+          >
+            <Ionicons name="add-circle-outline" size={24} color={colors.primary} />
+            <Text style={[styles.addExerciseText, { color: colors.primary }]}>Add Exercise</Text>
+          </Pressable>
 
-        <View style={styles.bottomPadding} />
-      </ScrollView>
+          <View style={styles.bottomPadding} />
+        </ScrollView>
       </KeyboardAvoidingView>
 
       {/* Exercise Picker Modal */}
@@ -287,34 +353,41 @@ export default function ActiveWorkoutScreen() {
           style={{ flex: 1 }}
           keyboardVerticalOffset={60}
         >
-          <View style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Add Exercise</Text>
+          <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
+            <View style={[styles.modalHeader, { borderBottomColor: colors.separator }]}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Add Exercise</Text>
               <Pressable onPress={() => { setShowExercisePicker(false); setSearchQuery(''); }}>
-                <Ionicons name="close" size={28} color={iconColor} />
+                <Ionicons name="close-circle-outline" size={28} color={colors.textSecondary} />
               </Pressable>
             </View>
 
-            <TextInput
-              style={[styles.searchInput, colorScheme === 'dark' ? styles.searchInputDark : styles.searchInputLight]}
-              placeholder="Search exercises..."
-              placeholderTextColor="#999"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-            />
+            <View style={styles.searchContainer}>
+              <Ionicons name="search" size={20} color={colors.textTertiary} style={styles.searchIcon} />
+              <TextInput
+                style={[styles.searchInput, { backgroundColor: colors.inputBackground, color: colors.text }]}
+                placeholder="Search exercises..."
+                placeholderTextColor={colors.textTertiary}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+              />
+            </View>
 
             <ScrollView style={styles.exerciseList} keyboardShouldPersistTaps="handled">
               {Object.entries(groupedExercises).map(([muscle, exercises]) => (
                 <View key={muscle} style={styles.muscleGroup}>
-                  <Text style={styles.muscleTitle}>{MUSCLE_LABELS[muscle] || muscle}</Text>
+                  <Text style={[styles.muscleTitle, { color: colors.textTertiary }]}>
+                    {MUSCLE_LABELS[muscle] || muscle}
+                  </Text>
                   {exercises.map(ex => (
                     <Pressable
                       key={ex.id}
-                      style={styles.exerciseItem}
+                      style={[styles.exerciseItem, { borderBottomColor: colors.separator }]}
                       onPress={() => addExercise(ex)}
                     >
-                      <Text style={styles.exerciseItemName}>{ex.name}</Text>
-                      <Text style={styles.exerciseItemEquipment}>{EQUIPMENT_LABELS[ex.equipment]}</Text>
+                      <Text style={[styles.exerciseItemName, { color: colors.text }]}>{ex.name}</Text>
+                      <Text style={[styles.exerciseItemEquipment, { color: colors.textTertiary }]}>
+                        {EQUIPMENT_LABELS[ex.equipment]}
+                      </Text>
                     </Pressable>
                   ))}
                 </View>
@@ -330,42 +403,40 @@ export default function ActiveWorkoutScreen() {
 function ExerciseCard({
   exercise,
   weightUnit,
+  colors,
   onRemoveExercise,
   onAddSet,
   onRemoveSet,
   onCompleteSet,
 }: {
   exercise: WorkoutExercise;
-  weightUnit: string;
+  weightUnit: WeightUnit;
+  colors: ReturnType<typeof useColors>;
   onRemoveExercise: () => void;
   onAddSet: () => void;
   onRemoveSet: (setNumber: number) => void;
   onCompleteSet: (setNumber: number, reps: number, weight: number) => void;
 }) {
-  const colorScheme = useColorScheme();
-
   return (
-    <View style={styles.exerciseCard}>
+    <Card variant="filled" style={styles.exerciseCard} padding="md">
       <View style={styles.exerciseHeader}>
         <View style={styles.exerciseInfo}>
-          <Text style={styles.exerciseName}>{exercise.name}</Text>
-          <Text style={styles.exerciseEquipment}>{EQUIPMENT_LABELS[exercise.equipment]}</Text>
+          <Text style={[styles.exerciseName, { color: colors.text }]}>{exercise.name}</Text>
+          <Text style={[styles.exerciseEquipment, { color: colors.textTertiary }]}>
+            {EQUIPMENT_LABELS[exercise.equipment]}
+          </Text>
         </View>
         <Pressable onPress={onRemoveExercise} style={styles.removeButton}>
-          <Ionicons name="trash-outline" size={20} color="#ff4444" />
+          <Ionicons name="trash-outline" size={20} color={colors.error} />
         </Pressable>
       </View>
 
-      {exercise.lastWeight && (
-        <Text style={styles.lastWeight}>Last: {convertWeight(exercise.lastWeight, weightUnit as 'kg' | 'lbs')} {weightUnit}</Text>
-      )}
-
       <View style={styles.setsContainer}>
         <View style={styles.setHeaderRow}>
-          <Text style={styles.setHeaderText}>Set</Text>
-          <Text style={styles.setHeaderText}>{weightUnit}</Text>
-          <Text style={styles.setHeaderText}>Reps</Text>
-          <Text style={styles.setHeaderText}></Text>
+          <Text style={[styles.setHeaderText, { color: colors.textTertiary }]}>Set</Text>
+          <Text style={[styles.setHeaderText, { color: colors.textTertiary }]}>{weightUnit}</Text>
+          <Text style={[styles.setHeaderText, { color: colors.textTertiary }]}>Reps</Text>
+          <Text style={[styles.setHeaderText, { color: colors.textTertiary }]}></Text>
         </View>
 
         {exercise.sets.map(set => (
@@ -373,42 +444,38 @@ function ExerciseCard({
             key={set.setNumber}
             set={set}
             weightUnit={weightUnit}
-            lastWeight={exercise.lastWeight}
+            colors={colors}
             onComplete={(reps, weight) => onCompleteSet(set.setNumber, reps, weight)}
             onRemove={() => onRemoveSet(set.setNumber)}
             canRemove={exercise.sets.length > 1}
-            colorScheme={colorScheme}
           />
         ))}
 
         <Pressable style={styles.addSetButton} onPress={onAddSet}>
-          <Text style={styles.addSetText}>+ Add Set</Text>
+          <Text style={[styles.addSetText, { color: colors.primary }]}>+ Add Set</Text>
         </Pressable>
       </View>
-    </View>
+    </Card>
   );
 }
 
 function SetRow({
   set,
   weightUnit,
-  lastWeight,
+  colors,
   onComplete,
   onRemove,
   canRemove,
-  colorScheme,
 }: {
   set: SetData;
-  weightUnit: string;
-  lastWeight: number | null;
+  weightUnit: WeightUnit;
+  colors: ReturnType<typeof useColors>;
   onComplete: (reps: number, weight: number) => void;
   onRemove: () => void;
   canRemove: boolean;
-  colorScheme: string | null | undefined;
 }) {
   const [reps, setReps] = useState('');
-  const [weight, setWeight] = useState(lastWeight ? convertWeight(lastWeight, weightUnit as 'kg' | 'lbs').toString() : '');
-  const inputStyle = colorScheme === 'dark' ? styles.inputDark : styles.inputLight;
+  const [weight, setWeight] = useState('');
 
   const handleComplete = () => {
     const repsNum = parseInt(reps, 10);
@@ -421,10 +488,14 @@ function SetRow({
   if (set.completed) {
     return (
       <View style={styles.setRow}>
-        <Text style={styles.setNumber}>{set.setNumber}</Text>
-        <Text style={styles.setWeight}>{set.weight !== null ? convertWeight(set.weight, weightUnit as 'kg' | 'lbs') : '-'}</Text>
-        <Text style={styles.setReps}>{set.reps}</Text>
-        <Text style={styles.checkmark}>✓</Text>
+        <Text style={[styles.setNumber, { color: colors.text }]}>{set.setNumber}</Text>
+        <Text style={[styles.setWeight, { color: colors.text }]}>
+          {set.weight !== null ? convertWeight(set.weight, weightUnit) : '-'}
+        </Text>
+        <Text style={[styles.setReps, { color: colors.text }]}>{set.reps}</Text>
+        <View style={[styles.completedBadge, { backgroundColor: colors.success + '20' }]}>
+          <Ionicons name="checkmark" size={18} color={colors.success} />
+        </View>
       </View>
     );
   }
@@ -432,31 +503,34 @@ function SetRow({
   return (
     <View style={styles.setRow}>
       <View style={styles.setNumberContainer}>
-        <Text style={styles.setNumber}>{set.setNumber}</Text>
+        <Text style={[styles.setNumber, { color: colors.text }]}>{set.setNumber}</Text>
         {canRemove && (
           <Pressable onPress={onRemove} style={styles.removeSetButton}>
-            <Ionicons name="close-circle" size={16} color="#ff4444" />
+            <Ionicons name="close-circle" size={16} color={colors.error} />
           </Pressable>
         )}
       </View>
       <TextInput
-        style={[styles.input, inputStyle]}
+        style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text }]}
         value={weight}
         onChangeText={setWeight}
         placeholder={weightUnit}
         keyboardType="decimal-pad"
-        placeholderTextColor="#999"
+        placeholderTextColor={colors.textTertiary}
       />
       <TextInput
-        style={[styles.input, inputStyle]}
+        style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text }]}
         value={reps}
         onChangeText={setReps}
         placeholder="Reps"
         keyboardType="number-pad"
-        placeholderTextColor="#999"
+        placeholderTextColor={colors.textTertiary}
       />
-      <Pressable style={styles.completeButton} onPress={handleComplete}>
-        <Text style={styles.completeButtonText}>✓</Text>
+      <Pressable
+        style={[styles.completeButton, { backgroundColor: colors.success }]}
+        onPress={handleComplete}
+      >
+        <Ionicons name="checkmark" size={18} color="#fff" />
       </Pressable>
     </View>
   );
@@ -469,21 +543,25 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
+    padding: Spacing.lg,
     paddingTop: 60,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(128, 128, 128, 0.2)',
   },
-  cancelText: { color: '#ff4444', fontSize: 16 },
-  timer: { fontSize: 20, fontWeight: '600' },
-  finishText: { color: '#4CAF50', fontSize: 16, fontWeight: '600' },
+  cancelText: { ...Typography.body, fontWeight: '500' },
+  timerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.medium,
+  },
+  timer: { ...Typography.headline },
+  finishText: { ...Typography.body, fontWeight: '600' },
   scrollView: { flex: 1 },
   exerciseCard: {
-    margin: 16,
-    marginBottom: 8,
-    padding: 16,
-    backgroundColor: 'rgba(128, 128, 128, 0.1)',
-    borderRadius: 12,
+    marginHorizontal: Spacing.lg,
+    marginTop: Spacing.lg,
   },
   exerciseHeader: {
     flexDirection: 'row',
@@ -492,21 +570,20 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   exerciseInfo: { flex: 1, backgroundColor: 'transparent' },
-  exerciseName: { fontSize: 18, fontWeight: '600' },
-  exerciseEquipment: { fontSize: 14, opacity: 0.7 },
-  lastWeight: { fontSize: 14, opacity: 0.7, marginTop: 4 },
-  removeButton: { padding: 8 },
-  setsContainer: { marginTop: 12 },
+  exerciseName: { ...Typography.headline },
+  exerciseEquipment: { ...Typography.footnote, marginTop: 2 },
+  removeButton: { padding: Spacing.sm },
+  setsContainer: { marginTop: Spacing.md },
   setHeaderRow: {
     flexDirection: 'row',
-    paddingVertical: 8,
+    paddingVertical: Spacing.sm,
     backgroundColor: 'transparent',
   },
-  setHeaderText: { flex: 1, fontSize: 12, opacity: 0.5, textAlign: 'center' },
+  setHeaderText: { flex: 1, ...Typography.caption1, textAlign: 'center' },
   setRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: Spacing.sm,
     backgroundColor: 'transparent',
   },
   setNumberContainer: {
@@ -516,35 +593,46 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: 'transparent',
   },
-  setNumber: { fontWeight: '600', marginRight: 4 },
+  setNumber: { ...Typography.body, fontWeight: '600', marginRight: 4 },
   removeSetButton: { padding: 2 },
-  setWeight: { flex: 1, textAlign: 'center' },
-  setReps: { flex: 1, textAlign: 'center' },
-  checkmark: { flex: 1, textAlign: 'center', color: '#4CAF50', fontSize: 18 },
-  input: { flex: 1, marginHorizontal: 4, padding: 8, borderRadius: 8, textAlign: 'center' },
-  inputLight: { backgroundColor: '#fff', color: '#000' },
-  inputDark: { backgroundColor: '#333', color: '#fff' },
+  setWeight: { flex: 1, textAlign: 'center', ...Typography.body },
+  setReps: { flex: 1, textAlign: 'center', ...Typography.body },
+  completedBadge: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 32,
+    height: 32,
+    borderRadius: Radius.medium,
+  },
+  input: {
+    flex: 1,
+    marginHorizontal: 4,
+    padding: Spacing.sm,
+    borderRadius: Radius.medium,
+    textAlign: 'center',
+    ...Typography.body,
+  },
   completeButton: {
     flex: 1,
-    backgroundColor: '#4CAF50',
-    padding: 8,
-    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: Spacing.sm,
+    borderRadius: Radius.medium,
     marginLeft: 4,
   },
-  completeButtonText: { color: '#fff', textAlign: 'center', fontWeight: '600' },
-  addSetButton: { padding: 8, alignItems: 'center', marginTop: 8 },
-  addSetText: { color: '#007AFF', fontSize: 14, fontWeight: '500' },
+  addSetButton: { padding: Spacing.sm, alignItems: 'center', marginTop: Spacing.sm },
+  addSetText: { ...Typography.subhead, fontWeight: '500' },
   addExerciseButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    margin: 16,
-    padding: 16,
-    backgroundColor: 'rgba(0, 122, 255, 0.1)',
-    borderRadius: 12,
-    gap: 8,
+    margin: Spacing.lg,
+    padding: Spacing.lg,
+    borderRadius: Radius.large,
+    gap: Spacing.sm,
   },
-  addExerciseText: { color: '#007AFF', fontSize: 16, fontWeight: '600' },
+  addExerciseText: { ...Typography.headline },
   bottomPadding: { height: 100 },
   // Modal styles
   modalContainer: { flex: 1, paddingTop: 60 },
@@ -552,47 +640,65 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
+    padding: Spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(128, 128, 128, 0.2)',
   },
-  modalTitle: { fontSize: 20, fontWeight: '600' },
-  searchInput: { margin: 16, padding: 12, borderRadius: 10, fontSize: 16 },
-  searchInputLight: { backgroundColor: '#f0f0f0', color: '#000' },
-  searchInputDark: { backgroundColor: '#333', color: '#fff' },
+  modalTitle: { ...Typography.title2 },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    margin: Spacing.lg,
+  },
+  searchIcon: {
+    position: 'absolute',
+    left: Spacing.md,
+    zIndex: 1,
+  },
+  searchInput: {
+    flex: 1,
+    padding: Spacing.md,
+    paddingLeft: 44,
+    borderRadius: Radius.medium,
+    ...Typography.body,
+  },
   exerciseList: { flex: 1 },
-  muscleGroup: { marginBottom: 16 },
+  muscleGroup: { marginBottom: Spacing.lg },
   muscleTitle: {
-    fontSize: 14,
+    ...Typography.footnote,
     fontWeight: '600',
-    opacity: 0.5,
     textTransform: 'uppercase',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    letterSpacing: 0.5,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
   },
   exerciseItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(128, 128, 128, 0.1)',
+    padding: Spacing.lg,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  exerciseItemName: { fontSize: 16 },
-  exerciseItemEquipment: { fontSize: 14, opacity: 0.5 },
+  exerciseItemName: { ...Typography.body },
+  exerciseItemEquipment: { ...Typography.footnote },
   // Complete screen
-  completeContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
-  completeTitle: { fontSize: 32, fontWeight: 'bold' },
-  completeTime: { fontSize: 18, opacity: 0.7, marginTop: 8 },
-  completeStats: { fontSize: 16, opacity: 0.5, marginTop: 4 },
-  doneButton: {
-    marginTop: 40,
-    backgroundColor: '#4CAF50',
-    paddingVertical: 16,
-    paddingHorizontal: 48,
-    borderRadius: 12,
+  completeContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: Spacing.xl,
   },
-  doneButtonText: { color: '#fff', fontSize: 18, fontWeight: '600' },
+  completeIconContainer: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.xl,
+  },
+  completeTitle: { ...Typography.largeTitle },
+  completeTime: { ...Typography.subhead, marginTop: Spacing.sm },
+  completeStats: { ...Typography.footnote, marginTop: Spacing.xs },
+  doneButton: { marginTop: Spacing.xxl, minWidth: 200 },
   // Rest overlay
   restOverlay: {
     position: 'absolute',
@@ -600,13 +706,42 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-    justifyContent: 'center',
-    alignItems: 'center',
     zIndex: 100,
   },
-  restCard: { backgroundColor: '#333', padding: 40, borderRadius: 20, alignItems: 'center' },
-  restTitle: { fontSize: 24, fontWeight: '600', color: '#fff' },
-  restTime: { fontSize: 64, fontWeight: 'bold', color: '#4CAF50', marginVertical: 20 },
-  restTap: { fontSize: 14, color: '#999' },
+  restBlur: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  restCard: {
+    padding: Spacing.xxl,
+    borderRadius: Radius.xl,
+    alignItems: 'center',
+    minWidth: 200,
+  },
+  restTitle: { ...Typography.footnote, textTransform: 'uppercase', letterSpacing: 1 },
+  restTime: { fontSize: 56, fontWeight: 'bold', marginTop: Spacing.md, marginBottom: Spacing.lg },
+  restTap: { ...Typography.footnote },
+  // Mini timer badge
+  miniTimerBadge: {
+    position: 'absolute',
+    bottom: 100,
+    right: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+    zIndex: 50,
+  },
+  miniTimerText: {
+    fontWeight: '600',
+    fontSize: 14,
+  },
 });

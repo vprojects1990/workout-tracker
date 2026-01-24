@@ -1,18 +1,21 @@
-import { Link, Stack } from 'expo-router';
-import { StyleSheet } from 'react-native';
+import { Stack, useRouter } from 'expo-router';
+import { StyleSheet, Pressable } from 'react-native';
 
-import { Text, View } from '@/components/Themed';
+import { Text, View, useColors } from '@/components/Themed';
 
 export default function NotFoundScreen() {
+  const router = useRouter();
+  const colors = useColors();
+
   return (
     <>
       <Stack.Screen options={{ title: 'Oops!' }} />
       <View style={styles.container}>
         <Text style={styles.title}>This screen doesn't exist.</Text>
 
-        <Link href="/" style={styles.link}>
-          <Text style={styles.linkText}>Go to home screen!</Text>
-        </Link>
+        <Pressable onPress={() => router.replace('/(tabs)' as any)} style={styles.link}>
+          <Text style={[styles.linkText, { color: colors.primary }]}>Go to home screen!</Text>
+        </Pressable>
       </View>
     </>
   );
@@ -35,6 +38,5 @@ const styles = StyleSheet.create({
   },
   linkText: {
     fontSize: 14,
-    color: '#2e78b7',
   },
 });

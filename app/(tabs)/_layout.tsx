@@ -20,7 +20,8 @@ export default function TabLayout() {
       screenOptions={{
         tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
         headerShown: false,
-      }}>
+      }}
+      initialRouteName="workout">
       <Tabs.Screen
         name="workout"
         options={{

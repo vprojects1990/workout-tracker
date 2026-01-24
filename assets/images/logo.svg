@@ -1,0 +1,12 @@
+<svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!-- Outer ring (weight plate edge) -->
+  <circle cx="512" cy="512" r="480" fill="#2196F3"/>
+  <!-- Inner white ring -->
+  <circle cx="512" cy="512" r="400" fill="#FFFFFF"/>
+  <!-- Center blue circle -->
+  <circle cx="512" cy="512" r="200" fill="#2196F3"/>
+  <!-- Checkmark in center -->
+  <path d="M380 520 L470 610 L650 430"
+        stroke="#FFFFFF" stroke-width="50"
+        fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

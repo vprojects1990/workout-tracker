@@ -1,15 +1,18 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { StyleSheet, ScrollView, ActivityIndicator, Pressable, Modal, FlatList } from 'react-native';
-import { Text, View } from '@/components/Themed';
+import { Text, View, useColors } from '@/components/Themed';
 import { useProgressiveOverload, ExerciseProgress, ProgressStatus, SourceWorkout } from '@/hooks/useProgressiveOverload';
 import { useFocusEffect } from 'expo-router';
 import { useSettings, convertWeight } from '@/hooks/useSettings';
 import { Ionicons } from '@expo/vector-icons';
-import { useColorScheme } from '@/components/useColorScheme';
 import { useWorkoutSplits, TemplateWithDetails } from '@/hooks/useWorkoutTemplates';
 import { db } from '@/db';
 import { workoutSessions } from '@/db/schema';
 import { desc, isNotNull } from 'drizzle-orm';
+import { Card, Badge } from '@/components/ui';
+import { Typography } from '@/constants/Typography';
+import { Spacing, Radius } from '@/constants/Spacing';
+import * as Haptics from 'expo-haptics';
 
 type FilterMode = 'all' | 'template' | 'session';
 
@@ -19,7 +22,6 @@ type RecentSession = {
   completedAt: Date;
 };
 
-// Hook to fetch recent sessions
 function useRecentSessions(limit: number = 5) {
   const [sessions, setSessions] = useState<RecentSession[]>([]);
   const [loading, setLoading] = useState(true);
@@ -61,12 +63,6 @@ function useRecentSessions(limit: number = 5) {
   return { sessions, loading, refetch: fetchSessions };
 }
 
-const STATUS_COLORS: Record<ProgressStatus, string> = {
-  progressing: '#4CAF50',
-  maintaining: '#FFC107',
-  stalled: '#f44336',
-};
-
 const STATUS_LABELS: Record<ProgressStatus, string> = {
   progressing: 'Progressing',
   maintaining: 'Maintaining',
@@ -87,6 +83,7 @@ const MUSCLE_LABELS: Record<string, string> = {
   shoulders: 'Shoulders',
   biceps: 'Biceps',
   triceps: 'Triceps',
+  forearms: 'Forearms',
   quads: 'Quads',
   hamstrings: 'Hamstrings',
   glutes: 'Glutes',
@@ -94,7 +91,7 @@ const MUSCLE_LABELS: Record<string, string> = {
   core: 'Core',
 };
 
-const MUSCLE_ORDER = ['chest', 'back', 'shoulders', 'biceps', 'triceps', 'quads', 'hamstrings', 'glutes', 'calves', 'core'];
+const MUSCLE_ORDER = ['chest', 'back', 'shoulders', 'biceps', 'triceps', 'forearms', 'quads', 'hamstrings', 'glutes', 'calves', 'core'];
 
 function formatShortDate(date: Date): string {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -102,17 +99,10 @@ function formatShortDate(date: Date): string {
 
 function formatSourceWorkouts(sourceWorkouts: SourceWorkout[]): string {
   if (sourceWorkouts.length === 0) return '';
-
-  // Get unique template names (non-null)
   const uniqueTemplates = [...new Set(
-    sourceWorkouts
-      .map(sw => sw.templateName)
-      .filter((name): name is string => name !== null)
+    sourceWorkouts.map(sw => sw.templateName).filter((name): name is string => name !== null)
   )];
-
-  // Check if there are any "empty workouts" (null template names)
   const hasEmptyWorkouts = sourceWorkouts.some(sw => sw.templateName === null);
-
   const parts: string[] = [];
 
   if (uniqueTemplates.length > 0) {
@@ -136,79 +126,102 @@ function formatSourceWorkouts(sourceWorkouts: SourceWorkout[]): string {
 }
 
 function ProgressBar({ progress, status }: { progress: ExerciseProgress; status: ProgressStatus }) {
-  // Calculate progress percentage based on sessions at current weight
-  // Max out at 3 sessions (after which it's considered stalled)
+  const colors = useColors();
   const sessionsAtWeight = progress.sessionsAtCurrentWeight;
   const percentage = Math.min(sessionsAtWeight / 3, 1) * 100;
-  const color = STATUS_COLORS[status];
+
+  const getStatusColor = () => {
+    switch (status) {
+      case 'progressing': return colors.success;
+      case 'maintaining': return colors.warning;
+      case 'stalled': return colors.error;
+    }
+  };
 
   return (
-    <View style={styles.progressBarContainer}>
-      <View style={styles.progressBarBackground}>
-        <View style={[styles.progressBarFill, { width: `${percentage}%`, backgroundColor: color }]} />
+    <View style={[styles.progressBarContainer, { backgroundColor: 'transparent' }]}>
+      <View style={[styles.progressBarBackground, { backgroundColor: colors.fillTertiary }]}>
+        <View style={[styles.progressBarFill, { width: `${percentage}%`, backgroundColor: getStatusColor() }]} />
       </View>
-      <Text style={styles.progressBarText}>{sessionsAtWeight} sessions</Text>
+      <Text style={[styles.progressBarText, { color: colors.textTertiary }]}>
+        {sessionsAtWeight} sessions
+      </Text>
     </View>
   );
 }
 
 function ExerciseProgressCard({ progress, weightUnit }: { progress: ExerciseProgress; weightUnit: string }) {
-  const statusColor = STATUS_COLORS[progress.status];
+  const colors = useColors();
   const displayWeight = progress.currentWeight !== null
     ? (weightUnit === 'lbs' ? convertWeight(progress.currentWeight, 'lbs') : progress.currentWeight)
     : null;
-
   const sourceText = formatSourceWorkouts(progress.sourceWorkouts);
 
+  const getStatusVariant = (): 'success' | 'warning' | 'error' => {
+    switch (progress.status) {
+      case 'progressing': return 'success';
+      case 'maintaining': return 'warning';
+      case 'stalled': return 'error';
+    }
+  };
+
   return (
-    <View style={styles.progressCard}>
-      <View style={styles.cardHeader}>
-        <View style={styles.exerciseInfo}>
-          <Text style={styles.exerciseName}>{progress.exerciseName}</Text>
-          <Text style={styles.exerciseEquipment}>{EQUIPMENT_LABELS[progress.equipment]}</Text>
+    <Card variant="filled" style={styles.progressCard} padding="md">
+      <View style={[styles.cardHeader, { backgroundColor: 'transparent' }]}>
+        <View style={[styles.exerciseInfo, { backgroundColor: 'transparent' }]}>
+          <Text style={[styles.exerciseName, { color: colors.text }]}>{progress.exerciseName}</Text>
+          <Text style={[styles.exerciseEquipment, { color: colors.textSecondary }]}>
+            {EQUIPMENT_LABELS[progress.equipment]}
+          </Text>
         </View>
-        <View style={[styles.statusBadge, { backgroundColor: statusColor }]}>
-          <Text style={styles.statusText}>{STATUS_LABELS[progress.status]}</Text>
-        </View>
+        <Badge label={STATUS_LABELS[progress.status]} variant={getStatusVariant()} size="sm" />
       </View>
 
-      <View style={styles.cardBody}>
+      <View style={[styles.cardBody, { backgroundColor: 'transparent' }]}>
         {displayWeight !== null ? (
           <>
-            <View style={styles.weightRow}>
-              <Text style={styles.currentWeight}>{displayWeight} {weightUnit}</Text>
-              <Text style={styles.lastSession}>
+            <View style={[styles.weightRow, { backgroundColor: 'transparent' }]}>
+              <Text style={[styles.currentWeight, { color: colors.text }]}>
+                {displayWeight} {weightUnit}
+              </Text>
+              <Text style={[styles.lastSession, { color: colors.textSecondary }]}>
                 Last: {progress.lastSessionReps.join(', ')} reps
               </Text>
             </View>
             <ProgressBar progress={progress} status={progress.status} />
           </>
         ) : (
-          <Text style={styles.noData}>No data yet</Text>
+          <Text style={[styles.noData, { color: colors.textTertiary }]}>No data yet</Text>
         )}
 
         {progress.readyToIncrease && (
-          <View style={styles.recommendation}>
-            <Ionicons name="arrow-up-circle" size={16} color="#4CAF50" />
-            <Text style={styles.recommendationText}>Ready to increase weight</Text>
+          <View style={[styles.recommendation, { backgroundColor: colors.success + '20' }]}>
+            <Ionicons name="arrow-up-circle" size={16} color={colors.success} />
+            <Text style={[styles.recommendationText, { color: colors.success }]}>
+              Ready to increase weight
+            </Text>
           </View>
         )}
 
         {progress.status === 'stalled' && (
-          <View style={[styles.recommendation, styles.stalledRecommendation]}>
-            <Ionicons name="warning" size={16} color="#f44336" />
-            <Text style={styles.stalledText}>Consider deload or variation</Text>
+          <View style={[styles.recommendation, { backgroundColor: colors.error + '20' }]}>
+            <Ionicons name="warning" size={16} color={colors.error} />
+            <Text style={[styles.recommendationText, { color: colors.error }]}>
+              Consider deload or variation
+            </Text>
           </View>
         )}
 
         {sourceText && (
-          <View style={styles.sourceContainer}>
-            <Ionicons name="information-circle-outline" size={12} color="rgba(128, 128, 128, 0.7)" />
-            <Text style={styles.sourceText}>Based on: {sourceText}</Text>
+          <View style={[styles.sourceContainer, { borderTopColor: colors.separator, backgroundColor: 'transparent' }]}>
+            <Ionicons name="information-circle-outline" size={12} color={colors.textTertiary} />
+            <Text style={[styles.sourceText, { color: colors.textTertiary }]}>
+              Based on: {sourceText}
+            </Text>
           </View>
         )}
       </View>
-    </View>
+    </Card>
   );
 }
 
@@ -225,39 +238,43 @@ function MuscleGroupSection({
   expanded: boolean;
   onToggle: () => void;
 }) {
-  const colorScheme = useColorScheme();
-  const iconColor = colorScheme === 'dark' ? '#fff' : '#000';
-
+  const colors = useColors();
   const progressingCount = exercises.filter(e => e.status === 'progressing').length;
   const stalledCount = exercises.filter(e => e.status === 'stalled').length;
 
+  const handleToggle = () => {
+    Haptics.selectionAsync();
+    onToggle();
+  };
+
   return (
-    <View style={styles.muscleSection}>
-      <Pressable style={styles.muscleSectionHeader} onPress={onToggle}>
-        <View style={styles.muscleTitleContainer}>
-          <Text style={styles.muscleSectionTitle}>{MUSCLE_LABELS[muscle] || muscle}</Text>
-          <View style={styles.muscleStats}>
+    <Card variant="filled" style={styles.muscleSection} padding="none">
+      <Pressable
+        style={[styles.muscleSectionHeader, { backgroundColor: colors.fillSecondary }]}
+        onPress={handleToggle}
+      >
+        <View style={[styles.muscleTitleContainer, { backgroundColor: 'transparent' }]}>
+          <Text style={[styles.muscleSectionTitle, { color: colors.text }]}>
+            {MUSCLE_LABELS[muscle] || muscle}
+          </Text>
+          <View style={[styles.muscleStats, { backgroundColor: 'transparent' }]}>
             {progressingCount > 0 && (
-              <View style={[styles.miniStatBadge, { backgroundColor: STATUS_COLORS.progressing }]}>
-                <Text style={styles.miniStatText}>{progressingCount}</Text>
-              </View>
+              <Badge label={String(progressingCount)} variant="success" size="sm" />
             )}
             {stalledCount > 0 && (
-              <View style={[styles.miniStatBadge, { backgroundColor: STATUS_COLORS.stalled }]}>
-                <Text style={styles.miniStatText}>{stalledCount}</Text>
-              </View>
+              <Badge label={String(stalledCount)} variant="error" size="sm" />
             )}
           </View>
         </View>
         <Ionicons
           name={expanded ? 'chevron-up' : 'chevron-down'}
           size={20}
-          color={iconColor}
+          color={colors.textTertiary}
         />
       </Pressable>
 
       {expanded && (
-        <View style={styles.muscleExercises}>
+        <View style={[styles.muscleExercises, { backgroundColor: 'transparent' }]}>
           {exercises.map(exercise => (
             <ExerciseProgressCard
               key={exercise.exerciseId}
@@ -267,11 +284,10 @@ function MuscleGroupSection({
           ))}
         </View>
       )}
-    </View>
+    </Card>
   );
 }
 
-// Filter Tab Button Component
 function FilterTab({
   label,
   active,
@@ -283,20 +299,20 @@ function FilterTab({
   onPress: () => void;
   hasDropdown?: boolean;
 }) {
-  const colorScheme = useColorScheme();
+  const colors = useColors();
 
   return (
     <Pressable
       style={[
         styles.filterTab,
-        active && styles.filterTabActive,
+        { backgroundColor: active ? colors.primary + '20' : colors.fillTertiary },
       ]}
       onPress={onPress}
     >
       <Text
         style={[
           styles.filterTabText,
-          active && styles.filterTabTextActive,
+          { color: active ? colors.primary : colors.textSecondary },
         ]}
       >
         {label}
@@ -305,7 +321,7 @@ function FilterTab({
         <Ionicons
           name="chevron-down"
           size={12}
-          color={active ? '#007AFF' : (colorScheme === 'dark' ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)')}
+          color={active ? colors.primary : colors.textSecondary}
           style={{ marginLeft: 2 }}
         />
       )}
@@ -313,7 +329,6 @@ function FilterTab({
   );
 }
 
-// Picker Modal Component
 function PickerModal<T extends { id: string }>({
   visible,
   onClose,
@@ -331,23 +346,16 @@ function PickerModal<T extends { id: string }>({
   onSelect: (id: string) => void;
   renderItem: (item: T, selected: boolean) => React.ReactNode;
 }) {
-  const colorScheme = useColorScheme();
-  const backgroundColor = colorScheme === 'dark' ? '#1c1c1e' : '#fff';
-  const textColor = colorScheme === 'dark' ? '#fff' : '#000';
+  const colors = useColors();
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      transparent
-      onRequestClose={onClose}
-    >
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.modalOverlay}>
-        <View style={[styles.modalContent, { backgroundColor }]}>
-          <View style={styles.modalHeader}>
-            <Text style={[styles.modalTitle, { color: textColor }]}>{title}</Text>
+        <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.separator }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>{title}</Text>
             <Pressable onPress={onClose} style={styles.modalCloseButton}>
-              <Ionicons name="close" size={24} color={textColor} />
+              <Ionicons name="close" size={24} color={colors.text} />
             </Pressable>
           </View>
           <FlatList
@@ -357,9 +365,11 @@ function PickerModal<T extends { id: string }>({
               <Pressable
                 style={[
                   styles.modalItem,
-                  selectedId === item.id && styles.modalItemSelected,
+                  { borderBottomColor: colors.separator },
+                  selectedId === item.id && { backgroundColor: colors.primary + '15' },
                 ]}
                 onPress={() => {
+                  Haptics.selectionAsync();
                   onSelect(item.id);
                   onClose();
                 }}
@@ -369,7 +379,9 @@ function PickerModal<T extends { id: string }>({
             )}
             ListEmptyComponent={
               <View style={styles.modalEmptyState}>
-                <Text style={[styles.modalEmptyText, { color: textColor }]}>No items available</Text>
+                <Text style={[styles.modalEmptyText, { color: colors.textSecondary }]}>
+                  No items available
+                </Text>
               </View>
             }
           />
@@ -381,27 +393,22 @@ function PickerModal<T extends { id: string }>({
 
 export default function InsightsScreen() {
   const { settings } = useSettings();
-  const colorScheme = useColorScheme();
-  const textColor = colorScheme === 'dark' ? '#fff' : '#000';
+  const colors = useColors();
 
-  // Filter state
   const [filterMode, setFilterMode] = useState<FilterMode>('all');
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
   const [showSessionPicker, setShowSessionPicker] = useState(false);
 
-  // Fetch data for filters
   const { splits, standaloneTemplates, loading: templatesLoading, refetch: refetchTemplates } = useWorkoutSplits();
   const { sessions: recentSessions, loading: sessionsLoading, refetch: refetchSessions } = useRecentSessions(5);
 
-  // Compute all templates from splits + standalone
   const allTemplates = useMemo(() => {
     const fromSplits = splits.flatMap(s => s.templates);
     return [...fromSplits, ...standaloneTemplates];
   }, [splits, standaloneTemplates]);
 
-  // Build options for useProgressiveOverload based on filter
   const progressOptions = useMemo(() => {
     if (filterMode === 'template' && selectedTemplateId) {
       return { templateId: selectedTemplateId };
@@ -435,20 +442,15 @@ export default function InsightsScreen() {
     });
   };
 
-  // Handle filter mode changes
   const handleFilterModeChange = (mode: FilterMode) => {
+    Haptics.selectionAsync();
     if (mode === filterMode) {
-      // If clicking same mode, toggle dropdown for template/session
-      if (mode === 'template') {
-        setShowTemplatePicker(true);
-      } else if (mode === 'session') {
-        setShowSessionPicker(true);
-      }
+      if (mode === 'template') setShowTemplatePicker(true);
+      else if (mode === 'session') setShowSessionPicker(true);
       return;
     }
 
     setFilterMode(mode);
-
     if (mode === 'all') {
       setSelectedTemplateId(null);
       setSelectedSessionId(null);
@@ -461,7 +463,6 @@ export default function InsightsScreen() {
     }
   };
 
-  // Get current filter label
   const getFilterLabel = (): string => {
     if (filterMode === 'all') return 'Showing all workouts';
     if (filterMode === 'template' && selectedTemplateId) {
@@ -479,21 +480,20 @@ export default function InsightsScreen() {
 
   if (loading || templatesLoading || sessionsLoading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" />
+      <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
 
   if (error) {
     return (
-      <View style={styles.errorContainer}>
-        <Text style={styles.errorText}>Error: {error.message}</Text>
+      <View style={[styles.errorContainer, { backgroundColor: colors.background }]}>
+        <Text style={[styles.errorText, { color: colors.error }]}>Error: {error.message}</Text>
       </View>
     );
   }
 
-  // Group exercises by muscle
   const exercisesByMuscle = exerciseProgress.reduce((acc, exercise) => {
     const muscle = exercise.primaryMuscle;
     if (!acc[muscle]) acc[muscle] = [];
@@ -502,18 +502,18 @@ export default function InsightsScreen() {
   }, {} as Record<string, ExerciseProgress[]>);
 
   const hasData = exerciseProgress.some(e => e.currentWeight !== null);
-
-  // Overall stats
   const totalProgressing = exerciseProgress.filter(e => e.status === 'progressing').length;
   const totalMaintaining = exerciseProgress.filter(e => e.status === 'maintaining').length;
   const totalStalled = exerciseProgress.filter(e => e.status === 'stalled').length;
-
   const filterLabel = getFilterLabel();
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Insights</Text>
+    <ScrollView
+      style={[styles.container, { backgroundColor: colors.background }]}
+      contentContainerStyle={styles.contentContainer}
+    >
+      <View style={[styles.header, { backgroundColor: 'transparent' }]}>
+        <Text style={[styles.title, { color: colors.text }]}>Insights</Text>
       </View>
 
       {/* Filter Tabs */}
@@ -533,9 +533,7 @@ export default function InsightsScreen() {
             hasDropdown
           />
           <FilterTab
-            label={filterMode === 'session' && selectedSessionId
-              ? 'Recent Session'
-              : 'Recent Session'}
+            label={filterMode === 'session' && selectedSessionId ? 'Recent Session' : 'Recent Session'}
             active={filterMode === 'session'}
             onPress={() => handleFilterModeChange('session')}
             hasDropdown
@@ -546,25 +544,27 @@ export default function InsightsScreen() {
       {/* Filter Label */}
       {filterMode !== 'all' && filterLabel && (
         <View style={styles.filterLabelContainer}>
-          <Ionicons name="filter" size={14} color="rgba(128, 128, 128, 0.7)" />
-          <Text style={styles.filterLabelText}>{filterLabel}</Text>
+          <Ionicons name="filter" size={14} color={colors.textTertiary} />
+          <Text style={[styles.filterLabelText, { color: colors.textSecondary }]}>{filterLabel}</Text>
           <Pressable
             onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               setFilterMode('all');
               setSelectedTemplateId(null);
               setSelectedSessionId(null);
             }}
             style={styles.clearFilterButton}
           >
-            <Ionicons name="close-circle" size={16} color="rgba(128, 128, 128, 0.7)" />
+            <Ionicons name="close-circle" size={16} color={colors.textTertiary} />
           </Pressable>
         </View>
       )}
 
       {!hasData ? (
         <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>Not enough data</Text>
-          <Text style={styles.emptySubtext}>
+          <Ionicons name="analytics-outline" size={48} color={colors.textTertiary} />
+          <Text style={[styles.emptyText, { color: colors.text }]}>Not enough data</Text>
+          <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>
             {filterMode === 'all'
               ? 'Complete some workouts to see insights'
               : 'No data for this filter. Try selecting a different workout.'}
@@ -574,18 +574,18 @@ export default function InsightsScreen() {
         <View style={styles.content}>
           {/* Overall Summary */}
           <View style={styles.summaryContainer}>
-            <View style={[styles.summaryCard, { borderLeftColor: STATUS_COLORS.progressing }]}>
-              <Text style={styles.summaryNumber}>{totalProgressing}</Text>
-              <Text style={styles.summaryLabel}>Progressing</Text>
-            </View>
-            <View style={[styles.summaryCard, { borderLeftColor: STATUS_COLORS.maintaining }]}>
-              <Text style={styles.summaryNumber}>{totalMaintaining}</Text>
-              <Text style={styles.summaryLabel}>Maintaining</Text>
-            </View>
-            <View style={[styles.summaryCard, { borderLeftColor: STATUS_COLORS.stalled }]}>
-              <Text style={styles.summaryNumber}>{totalStalled}</Text>
-              <Text style={styles.summaryLabel}>Stalled</Text>
-            </View>
+            <Card variant="filled" style={[styles.summaryCard, { borderLeftColor: colors.success }]} padding="md">
+              <Text style={[styles.summaryNumber, { color: colors.text }]}>{totalProgressing}</Text>
+              <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Progressing</Text>
+            </Card>
+            <Card variant="filled" style={[styles.summaryCard, { borderLeftColor: colors.warning }]} padding="md">
+              <Text style={[styles.summaryNumber, { color: colors.text }]}>{totalMaintaining}</Text>
+              <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Maintaining</Text>
+            </Card>
+            <Card variant="filled" style={[styles.summaryCard, { borderLeftColor: colors.error }]} padding="md">
+              <Text style={[styles.summaryNumber, { color: colors.text }]}>{totalStalled}</Text>
+              <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Stalled</Text>
+            </Card>
           </View>
 
           {/* Muscle Groups */}
@@ -611,11 +611,13 @@ export default function InsightsScreen() {
         selectedId={selectedTemplateId}
         onSelect={(id) => setSelectedTemplateId(id)}
         renderItem={(item, selected) => (
-          <View style={styles.pickerItemContent}>
-            <Text style={[styles.pickerItemText, { color: textColor }, selected && styles.pickerItemTextSelected]}>
+          <View style={[styles.pickerItemContent, { backgroundColor: 'transparent' }]}>
+            <Text style={[styles.pickerItemText, { color: selected ? colors.primary : colors.text }]}>
               {item.name}
             </Text>
-            <Text style={styles.pickerItemSubtext}>{item.exerciseCount} exercises</Text>
+            <Text style={[styles.pickerItemSubtext, { color: colors.textSecondary }]}>
+              {item.exerciseCount} exercises
+            </Text>
           </View>
         )}
       />
@@ -629,11 +631,13 @@ export default function InsightsScreen() {
         selectedId={selectedSessionId}
         onSelect={(id) => setSelectedSessionId(id)}
         renderItem={(item, selected) => (
-          <View style={styles.pickerItemContent}>
-            <Text style={[styles.pickerItemText, { color: textColor }, selected && styles.pickerItemTextSelected]}>
+          <View style={[styles.pickerItemContent, { backgroundColor: 'transparent' }]}>
+            <Text style={[styles.pickerItemText, { color: selected ? colors.primary : colors.text }]}>
               {item.templateName}
             </Text>
-            <Text style={styles.pickerItemSubtext}>{formatShortDate(item.completedAt)}</Text>
+            <Text style={[styles.pickerItemSubtext, { color: colors.textSecondary }]}>
+              {formatShortDate(item.completedAt)}
+            </Text>
           </View>
         )}
       />
@@ -645,6 +649,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  contentContainer: {
+    paddingBottom: Spacing.xxxl,
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -654,173 +661,122 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: Spacing.xl,
   },
   errorText: {
-    color: 'red',
+    ...Typography.body,
     textAlign: 'center',
   },
   header: {
-    padding: 20,
+    padding: Spacing.xl,
     paddingTop: 60,
   },
   title: {
-    fontSize: 32,
-    fontWeight: 'bold',
+    ...Typography.largeTitle,
   },
   emptyState: {
-    padding: 40,
+    padding: Spacing.section,
     alignItems: 'center',
   },
   emptyText: {
-    fontSize: 18,
-    fontWeight: '600',
+    ...Typography.headline,
+    marginTop: Spacing.lg,
   },
   emptySubtext: {
-    fontSize: 14,
-    opacity: 0.5,
-    marginTop: 8,
+    ...Typography.subhead,
+    marginTop: Spacing.sm,
+    textAlign: 'center',
   },
   content: {
-    padding: 20,
-    paddingTop: 0,
+    paddingHorizontal: Spacing.xl,
   },
-  // Summary cards
   summaryContainer: {
     flexDirection: 'row',
-    gap: 10,
-    marginBottom: 24,
+    gap: Spacing.sm,
+    marginBottom: Spacing.xl,
   },
   summaryCard: {
     flex: 1,
-    backgroundColor: 'rgba(128, 128, 128, 0.1)',
-    borderRadius: 10,
-    padding: 12,
     borderLeftWidth: 3,
   },
   summaryNumber: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    ...Typography.title1,
   },
   summaryLabel: {
-    fontSize: 12,
-    opacity: 0.6,
+    ...Typography.caption1,
     marginTop: 2,
   },
-  // Muscle sections
   muscleSection: {
-    marginBottom: 16,
-    backgroundColor: 'rgba(128, 128, 128, 0.05)',
-    borderRadius: 12,
-    overflow: 'hidden',
+    marginBottom: Spacing.md,
   },
   muscleSectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
-    backgroundColor: 'rgba(128, 128, 128, 0.1)',
+    padding: Spacing.lg,
+    borderRadius: Radius.large,
   },
   muscleTitleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    backgroundColor: 'transparent',
+    gap: Spacing.sm,
   },
   muscleSectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
+    ...Typography.headline,
   },
   muscleStats: {
     flexDirection: 'row',
-    gap: 4,
-    backgroundColor: 'transparent',
-  },
-  miniStatBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 8,
-  },
-  miniStatText: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: '600',
+    gap: Spacing.xs,
   },
   muscleExercises: {
-    padding: 8,
-    backgroundColor: 'transparent',
+    padding: Spacing.sm,
   },
-  // Exercise cards
   progressCard: {
-    backgroundColor: 'rgba(128, 128, 128, 0.1)',
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 8,
+    marginBottom: Spacing.sm,
   },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    backgroundColor: 'transparent',
   },
   exerciseInfo: {
     flex: 1,
-    backgroundColor: 'transparent',
   },
   exerciseName: {
-    fontSize: 15,
+    ...Typography.subhead,
     fontWeight: '600',
   },
   exerciseEquipment: {
-    fontSize: 11,
-    opacity: 0.7,
+    ...Typography.caption1,
     marginTop: 2,
   },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
-  },
-  statusText: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: '600',
-  },
   cardBody: {
-    marginTop: 10,
-    backgroundColor: 'transparent',
+    marginTop: Spacing.sm,
   },
   weightRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: 'transparent',
   },
   currentWeight: {
-    fontSize: 16,
-    fontWeight: '600',
+    ...Typography.headline,
   },
   lastSession: {
-    fontSize: 12,
-    opacity: 0.6,
+    ...Typography.caption1,
   },
   noData: {
-    fontSize: 13,
-    opacity: 0.5,
+    ...Typography.footnote,
     fontStyle: 'italic',
   },
-  // Progress bar
   progressBarContainer: {
-    marginTop: 8,
+    marginTop: Spacing.sm,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    backgroundColor: 'transparent',
+    gap: Spacing.sm,
   },
   progressBarBackground: {
     flex: 1,
     height: 6,
-    backgroundColor: 'rgba(128, 128, 128, 0.2)',
     borderRadius: 3,
     overflow: 'hidden',
   },
@@ -829,101 +785,73 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   progressBarText: {
-    fontSize: 10,
-    opacity: 0.5,
+    ...Typography.caption2,
     width: 60,
   },
-  // Recommendations
   recommendation: {
-    marginTop: 8,
-    padding: 8,
-    backgroundColor: 'rgba(76, 175, 80, 0.15)',
-    borderRadius: 6,
+    marginTop: Spacing.sm,
+    padding: Spacing.sm,
+    borderRadius: Radius.small,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: Spacing.xs,
   },
   recommendationText: {
-    color: '#4CAF50',
-    fontSize: 12,
+    ...Typography.caption1,
     fontWeight: '500',
   },
-  stalledRecommendation: {
-    backgroundColor: 'rgba(244, 67, 54, 0.15)',
-  },
-  stalledText: {
-    color: '#f44336',
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  // Source info
   sourceContainer: {
-    marginTop: 8,
-    paddingTop: 8,
+    marginTop: Spacing.sm,
+    paddingTop: Spacing.sm,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(128, 128, 128, 0.15)',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'transparent',
+    gap: Spacing.xs,
   },
   sourceText: {
-    fontSize: 10,
-    opacity: 0.5,
+    ...Typography.caption2,
     flex: 1,
   },
-  // Filter UI
   filterContainer: {
-    paddingHorizontal: 20,
-    marginBottom: 16,
+    paddingHorizontal: Spacing.xl,
+    marginBottom: Spacing.lg,
   },
   filterScrollContent: {
-    gap: 8,
+    gap: Spacing.sm,
   },
   filterTab: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: 'rgba(128, 128, 128, 0.1)',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.full,
     flexDirection: 'row',
     alignItems: 'center',
   },
-  filterTabActive: {
-    backgroundColor: 'rgba(0, 122, 255, 0.15)',
-  },
   filterTabText: {
-    fontSize: 13,
+    ...Typography.footnote,
     fontWeight: '500',
-    opacity: 0.7,
-  },
-  filterTabTextActive: {
-    color: '#007AFF',
-    opacity: 1,
   },
   filterLabelContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    marginBottom: 12,
-    gap: 6,
+    paddingHorizontal: Spacing.xl,
+    marginBottom: Spacing.md,
+    gap: Spacing.xs,
   },
   filterLabelText: {
-    fontSize: 12,
-    opacity: 0.6,
+    ...Typography.caption1,
     flex: 1,
   },
   clearFilterButton: {
-    padding: 4,
+    padding: Spacing.xs,
   },
-  // Modal styles
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-end',
   },
   modalContent: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: Radius.xl,
+    borderTopRightRadius: Radius.xl,
     maxHeight: '70%',
     paddingBottom: 34,
   },
@@ -931,46 +859,33 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
+    padding: Spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(128, 128, 128, 0.2)',
   },
   modalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+    ...Typography.headline,
   },
   modalCloseButton: {
-    padding: 4,
+    padding: Spacing.xs,
   },
   modalItem: {
-    padding: 16,
+    padding: Spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(128, 128, 128, 0.1)',
-  },
-  modalItemSelected: {
-    backgroundColor: 'rgba(0, 122, 255, 0.1)',
   },
   modalEmptyState: {
-    padding: 40,
+    padding: Spacing.section,
     alignItems: 'center',
   },
   modalEmptyText: {
-    fontSize: 14,
-    opacity: 0.5,
+    ...Typography.subhead,
   },
-  pickerItemContent: {
-    backgroundColor: 'transparent',
-  },
+  pickerItemContent: {},
   pickerItemText: {
-    fontSize: 16,
+    ...Typography.body,
     fontWeight: '500',
   },
-  pickerItemTextSelected: {
-    color: '#007AFF',
-  },
   pickerItemSubtext: {
-    fontSize: 12,
-    opacity: 0.5,
+    ...Typography.caption1,
     marginTop: 2,
   },
 });

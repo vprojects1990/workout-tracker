@@ -1,5 +1,8 @@
 import { StyleSheet } from 'react-native';
-import { View, Text } from '@/components/Themed';
+import { View, Text, useColors } from '@/components/Themed';
+import { Ionicons } from '@expo/vector-icons';
+import { Typography } from '@/constants/Typography';
+import { Spacing, Radius } from '@/constants/Spacing';
 
 type StepIndicatorProps = {
   currentStep: 1 | 2 | 3;
@@ -7,6 +10,8 @@ type StepIndicatorProps = {
 };
 
 export function StepIndicator({ currentStep, steps }: StepIndicatorProps) {
+  const colors = useColors();
+
   return (
     <View style={styles.container}>
       {steps.map((label, index) => {
@@ -19,19 +24,32 @@ export function StepIndicator({ currentStep, steps }: StepIndicatorProps) {
             <View
               style={[
                 styles.dot,
-                isActive && styles.dotActive,
-                isCompleted && styles.dotCompleted,
+                { backgroundColor: colors.backgroundSecondary },
+                isActive && { backgroundColor: colors.primary },
+                isCompleted && { backgroundColor: colors.success },
               ]}
             >
               {isCompleted ? (
-                <Text style={styles.checkmark}>✓</Text>
+                <Ionicons name="checkmark" size={16} color="#fff" />
               ) : (
-                <Text style={[styles.stepNumber, (isActive || isCompleted) && styles.stepNumberActive]}>
+                <Text
+                  style={[
+                    styles.stepNumber,
+                    { color: colors.textTertiary },
+                    (isActive || isCompleted) && styles.stepNumberActive,
+                  ]}
+                >
                   {stepNumber}
                 </Text>
               )}
             </View>
-            <Text style={[styles.label, isActive && styles.labelActive]}>
+            <Text
+              style={[
+                styles.label,
+                { color: colors.textTertiary },
+                isActive && { color: colors.text, fontWeight: '600' },
+              ]}
+            >
               {label}
             </Text>
           </View>
@@ -46,51 +64,32 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'flex-start',
-    paddingVertical: 16,
-    gap: 24,
+    paddingVertical: Spacing.lg,
+    gap: Spacing.xl,
     backgroundColor: 'transparent',
   },
   stepWrapper: {
     alignItems: 'center',
-    gap: 8,
+    gap: Spacing.sm,
     backgroundColor: 'transparent',
   },
   dot: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: 'rgba(128, 128, 128, 0.3)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  dotActive: {
-    backgroundColor: '#007AFF',
-  },
-  dotCompleted: {
-    backgroundColor: '#34C759',
-  },
   stepNumber: {
-    fontSize: 14,
+    ...Typography.subhead,
     fontWeight: '600',
-    opacity: 0.6,
   },
   stepNumberActive: {
     color: '#fff',
-    opacity: 1,
-  },
-  checkmark: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
   },
   label: {
-    fontSize: 12,
-    opacity: 0.6,
+    ...Typography.caption1,
     textAlign: 'center',
     maxWidth: 80,
-  },
-  labelActive: {
-    opacity: 1,
-    fontWeight: '600',
   },
 });

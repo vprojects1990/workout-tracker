@@ -339,6 +339,21 @@ export function useWorkoutMutations() {
     });
   }
 
+  // Delete a single workout template
+  async function deleteWorkoutTemplate(templateId: string): Promise<void> {
+    await db.transaction(async (tx) => {
+      // Delete all template exercises for this template
+      await tx
+        .delete(templateExercises)
+        .where(eq(templateExercises.templateId, templateId));
+
+      // Delete the template itself
+      await tx
+        .delete(workoutTemplates)
+        .where(eq(workoutTemplates.id, templateId));
+    });
+  }
+
   // Create a full split with workout days and exercises in a single transaction
   type WorkoutDayInput = {
     id: string;
@@ -413,6 +428,7 @@ export function useWorkoutMutations() {
     createWorkoutTemplate,
     addTemplateExercise,
     deleteWorkoutSplit,
+    deleteWorkoutTemplate,
     createFullSplit,
   };
 }

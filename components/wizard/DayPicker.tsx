@@ -1,8 +1,11 @@
 import { useState } from 'react';
 import { StyleSheet, Pressable, TextInput, Modal, Alert } from 'react-native';
-import { View, Text } from '@/components/Themed';
+import { View, Text, useColors } from '@/components/Themed';
 import { Ionicons } from '@expo/vector-icons';
-import { useColorScheme } from '@/components/useColorScheme';
+import * as Haptics from 'expo-haptics';
+import { Button } from '@/components/ui';
+import { Typography } from '@/constants/Typography';
+import { Spacing, Radius } from '@/constants/Spacing';
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const FULL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -21,21 +24,18 @@ type DayPickerProps = {
 };
 
 export function DayPicker({ workoutDays, onAddDay, onRemoveDay }: DayPickerProps) {
-  const colorScheme = useColorScheme();
-  const iconColor = colorScheme === 'dark' ? '#fff' : '#000';
-  const inputStyle = colorScheme === 'dark' ? styles.inputDark : styles.inputLight;
+  const colors = useColors();
 
   const [showSuffixModal, setShowSuffixModal] = useState(false);
   const [selectedDayIndex, setSelectedDayIndex] = useState<number | null>(null);
   const [suffix, setSuffix] = useState('');
 
   const handleDayPress = (dayIndex: number) => {
-    // Check if day is already added
     const existingDay = workoutDays.find(d => d.dayOfWeek === dayIndex);
     if (existingDay) {
-      // Already added, do nothing (user can remove via the list)
       return;
     }
+    Haptics.selectionAsync();
     setSelectedDayIndex(dayIndex);
     setSuffix('');
     setShowSuffixModal(true);
@@ -50,6 +50,7 @@ export function DayPicker({ workoutDays, onAddDay, onRemoveDay }: DayPickerProps
       return;
     }
 
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const displayName = `${FULL_DAYS[selectedDayIndex]} - ${trimmedSuffix}`;
     const newDay: WorkoutDay = {
       id: `day-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -68,7 +69,6 @@ export function DayPicker({ workoutDays, onAddDay, onRemoveDay }: DayPickerProps
     return workoutDays.some(d => d.dayOfWeek === dayIndex);
   };
 
-  // Sort workout days by dayOfWeek for display
   const sortedDays = [...workoutDays].sort((a, b) => a.dayOfWeek - b.dayOfWeek);
 
   return (
@@ -80,10 +80,18 @@ export function DayPicker({ workoutDays, onAddDay, onRemoveDay }: DayPickerProps
           return (
             <Pressable
               key={day}
-              style={[styles.dayButton, isSelected && styles.dayButtonSelected]}
+              style={[
+                styles.dayButton,
+                { backgroundColor: isSelected ? colors.primary : colors.backgroundSecondary },
+              ]}
               onPress={() => handleDayPress(index)}
             >
-              <Text style={[styles.dayText, isSelected && styles.dayTextSelected]}>
+              <Text
+                style={[
+                  styles.dayText,
+                  { color: isSelected ? '#fff' : colors.text },
+                ]}
+              >
                 {day}
               </Text>
             </Pressable>
@@ -94,12 +102,21 @@ export function DayPicker({ workoutDays, onAddDay, onRemoveDay }: DayPickerProps
       {/* Added days list */}
       {sortedDays.length > 0 && (
         <View style={styles.addedDaysList}>
-          <Text style={styles.addedDaysTitle}>Workout Days</Text>
+          <Text style={[styles.addedDaysTitle, { color: colors.textSecondary }]}>Workout Days</Text>
           {sortedDays.map(day => (
-            <View key={day.id} style={styles.addedDayRow}>
-              <Text style={styles.addedDayName}>{day.displayName}</Text>
-              <Pressable onPress={() => onRemoveDay(day.id)} style={styles.removeButton}>
-                <Ionicons name="close-circle" size={22} color="#ff4444" />
+            <View
+              key={day.id}
+              style={[styles.addedDayRow, { backgroundColor: colors.backgroundSecondary }]}
+            >
+              <Text style={[styles.addedDayName, { color: colors.text }]}>{day.displayName}</Text>
+              <Pressable
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  onRemoveDay(day.id);
+                }}
+                style={styles.removeButton}
+              >
+                <Ionicons name="close-circle" size={22} color={colors.error} />
               </Pressable>
             </View>
           ))}
@@ -109,34 +126,41 @@ export function DayPicker({ workoutDays, onAddDay, onRemoveDay }: DayPickerProps
       {/* Suffix input modal */}
       <Modal visible={showSuffixModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, colorScheme === 'dark' && styles.modalContentDark]}>
-            <Text style={styles.modalTitle}>
+          <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>
               {selectedDayIndex !== null ? FULL_DAYS[selectedDayIndex] : ''}
             </Text>
-            <Text style={styles.modalSubtitle}>Enter workout name</Text>
+            <Text style={[styles.modalSubtitle, { color: colors.textSecondary }]}>
+              Enter workout name
+            </Text>
             <TextInput
-              style={[styles.suffixInput, inputStyle]}
+              style={[styles.suffixInput, { backgroundColor: colors.inputBackground, color: colors.text }]}
               value={suffix}
               onChangeText={setSuffix}
               placeholder="e.g., Upper, Push, Legs"
-              placeholderTextColor="#999"
+              placeholderTextColor={colors.textTertiary}
               autoFocus
               onSubmitEditing={handleConfirmSuffix}
             />
             <View style={styles.modalButtons}>
-              <Pressable
-                style={styles.modalCancelButton}
+              <Button
+                title="Cancel"
+                variant="secondary"
+                size="md"
                 onPress={() => {
                   setShowSuffixModal(false);
                   setSelectedDayIndex(null);
                   setSuffix('');
                 }}
-              >
-                <Text style={styles.modalCancelText}>Cancel</Text>
-              </Pressable>
-              <Pressable style={styles.modalConfirmButton} onPress={handleConfirmSuffix}>
-                <Text style={styles.modalConfirmText}>Add</Text>
-              </Pressable>
+                style={styles.modalButton}
+              />
+              <Button
+                title="Add"
+                variant="primary"
+                size="md"
+                onPress={handleConfirmSuffix}
+                style={styles.modalButton}
+              />
             </View>
           </View>
         </View>
@@ -152,48 +176,38 @@ const styles = StyleSheet.create({
   daysRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 6,
+    gap: Spacing.xs,
     backgroundColor: 'transparent',
   },
   dayButton: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    backgroundColor: 'rgba(128, 128, 128, 0.15)',
+    paddingVertical: Spacing.md,
+    borderRadius: Radius.medium,
     alignItems: 'center',
   },
-  dayButtonSelected: {
-    backgroundColor: '#007AFF',
-  },
   dayText: {
-    fontSize: 13,
+    ...Typography.subhead,
     fontWeight: '500',
   },
-  dayTextSelected: {
-    color: '#fff',
-    fontWeight: '600',
-  },
   addedDaysList: {
-    marginTop: 20,
+    marginTop: Spacing.xl,
     backgroundColor: 'transparent',
   },
   addedDaysTitle: {
-    fontSize: 14,
+    ...Typography.subhead,
     fontWeight: '600',
-    opacity: 0.6,
-    marginBottom: 12,
+    marginBottom: Spacing.md,
   },
   addedDayRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: 'rgba(128, 128, 128, 0.1)',
-    borderRadius: 10,
-    padding: 14,
-    marginBottom: 8,
+    borderRadius: Radius.medium,
+    padding: Spacing.md,
+    marginBottom: Spacing.sm,
   },
   addedDayName: {
-    fontSize: 16,
+    ...Typography.body,
     fontWeight: '500',
   },
   removeButton: {
@@ -205,70 +219,36 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: Spacing.xl,
   },
   modalContent: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 24,
+    borderRadius: Radius.large,
+    padding: Spacing.xl,
     width: '100%',
     maxWidth: 320,
   },
-  modalContentDark: {
-    backgroundColor: '#1c1c1e',
-  },
   modalTitle: {
-    fontSize: 20,
-    fontWeight: '600',
+    ...Typography.title2,
     textAlign: 'center',
-    marginBottom: 4,
+    marginBottom: Spacing.xs,
   },
   modalSubtitle: {
-    fontSize: 14,
-    opacity: 0.6,
+    ...Typography.subhead,
     textAlign: 'center',
-    marginBottom: 16,
+    marginBottom: Spacing.lg,
   },
   suffixInput: {
-    padding: 14,
-    borderRadius: 10,
-    fontSize: 16,
-    marginBottom: 20,
-  },
-  inputLight: {
-    backgroundColor: '#f0f0f0',
-    color: '#000',
-  },
-  inputDark: {
-    backgroundColor: '#333',
-    color: '#fff',
+    padding: Spacing.md,
+    borderRadius: Radius.medium,
+    ...Typography.body,
+    marginBottom: Spacing.xl,
   },
   modalButtons: {
     flexDirection: 'row',
-    gap: 12,
+    gap: Spacing.md,
     backgroundColor: 'transparent',
   },
-  modalCancelButton: {
+  modalButton: {
     flex: 1,
-    padding: 14,
-    borderRadius: 10,
-    backgroundColor: 'rgba(128, 128, 128, 0.15)',
-    alignItems: 'center',
-  },
-  modalCancelText: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  modalConfirmButton: {
-    flex: 1,
-    padding: 14,
-    borderRadius: 10,
-    backgroundColor: '#007AFF',
-    alignItems: 'center',
-  },
-  modalConfirmText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#fff',
   },
 });
