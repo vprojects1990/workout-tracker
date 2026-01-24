@@ -40,7 +40,7 @@ A modern, feature-rich workout tracking app built with React Native and Expo. Tr
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/viralmakwana/workout-tracker.git
+   git clone https://github.com/vprojects1990/workout-tracker.git
    cd workout-tracker
    ```
 
