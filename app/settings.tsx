@@ -124,6 +124,24 @@ export default function SettingsScreen() {
             />
           </Card>
         </View>
+
+        {/* Support Section */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+            SUPPORT
+          </Text>
+          <Pressable onPress={() => router.push('/feedback')}>
+            <Card variant="filled" style={styles.card}>
+              <View style={styles.feedbackRow}>
+                <Ionicons name="chatbubble-outline" size={20} color={colors.primary} />
+                <Text style={[styles.feedbackText, { color: colors.text }]}>
+                  Send Feedback
+                </Text>
+                <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
+              </View>
+            </Card>
+          </Pressable>
+        </View>
       </ScrollView>
     </View>
   );
@@ -191,5 +209,14 @@ const styles = StyleSheet.create({
   },
   segmentedControl: {
     marginTop: Spacing.xs,
+  },
+  feedbackRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  feedbackText: {
+    ...Typography.body,
+    flex: 1,
   },
 });
