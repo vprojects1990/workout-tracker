@@ -11,7 +11,7 @@ import { eq } from 'drizzle-orm';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { Audio } from 'expo-av';
-import { Card, Button, Badge, Input } from '@/components/ui';
+import { Card, Button, Badge, Input, SegmentedControl, SwipeableRow } from '@/components/ui';
 import { Typography } from '@/constants/Typography';
 import { Spacing, Radius } from '@/constants/Spacing';
 
@@ -37,12 +37,18 @@ const MUSCLE_LABELS: Record<string, string> = {
   core: 'Core',
 };
 
+type ExerciseSettings = {
+  restSecondsOverride: number | null;
+  weightUnitOverride: WeightUnit | null;
+};
+
 type WorkoutExercise = {
   id: string;
   exerciseId: string;
   name: string;
   equipment: string;
   sets: SetData[];
+  settings: ExerciseSettings;
 };
 
 type SetData = {
@@ -74,6 +80,7 @@ export default function ActiveWorkoutScreen() {
   const [showExercisePicker, setShowExercisePicker] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [initialized, setInitialized] = useState(false);
+  const [activeExerciseMenu, setActiveExerciseMenu] = useState<string | null>(null);
 
   const startTimeRef = useRef<Date>(new Date());
   const templateNameRef = useRef<string>('Workout');
@@ -91,6 +98,7 @@ export default function ActiveWorkoutScreen() {
         name: ex.name,
         equipment: ex.equipment,
         sets: [{ setNumber: 1, reps: null, weight: null, completed: false }],
+        settings: { restSecondsOverride: null, weightUnitOverride: null },
       }));
       setWorkoutExercises(initialExercises);
       setInitialized(true);
@@ -166,6 +174,7 @@ export default function ActiveWorkoutScreen() {
       name: exercise.name,
       equipment: exercise.equipment,
       sets: [{ setNumber: 1, reps: null, weight: null, completed: false }],
+      settings: { restSecondsOverride: null, weightUnitOverride: null },
     };
     setWorkoutExercises(prev => [...prev, newExercise]);
     setShowExercisePicker(false);
@@ -201,20 +210,23 @@ export default function ActiveWorkoutScreen() {
     }));
   };
 
-  const completeSet = (exerciseId: string, setNumber: number, reps: number, weight: number) => {
+  const completeSet = (exerciseId: string, setNumber: number, reps: number, weight: number, effectiveWeightUnit: WeightUnit) => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    const exercise = workoutExercises.find(e => e.id === exerciseId);
+    const effectiveRestSeconds = exercise?.settings.restSecondsOverride ?? defaultRestSeconds;
+
     setWorkoutExercises(prev => prev.map(ex => {
       if (ex.id !== exerciseId) return ex;
       return {
         ...ex,
         sets: ex.sets.map(s =>
           s.setNumber === setNumber
-            ? { ...s, reps, weight: convertToKg(weight, weightUnit), completed: true }
+            ? { ...s, reps, weight: convertToKg(weight, effectiveWeightUnit), completed: true }
             : s
         ),
       };
     }));
-    setRestSeconds(defaultRestSeconds);
+    setRestSeconds(effectiveRestSeconds);
     setShowRestOverlay(true);
   };
 
@@ -262,6 +274,16 @@ export default function ActiveWorkoutScreen() {
     acc[muscle].push(ex);
     return acc;
   }, {} as Record<string, typeof filteredExercises>);
+
+  const getActiveExercise = () => workoutExercises.find(e => e.id === activeExerciseMenu);
+
+  const updateExerciseSettings = (exerciseId: string, updates: Partial<ExerciseSettings>) => {
+    setWorkoutExercises(prev => prev.map(ex =>
+      ex.id === exerciseId
+        ? { ...ex, settings: { ...ex.settings, ...updates } }
+        : ex
+    ));
+  };
 
   if (exercisesLoading) {
     return (
@@ -347,7 +369,8 @@ export default function ActiveWorkoutScreen() {
               onRemoveExercise={() => removeExercise(exercise.id)}
               onAddSet={() => addSet(exercise.id)}
               onRemoveSet={(setNumber) => removeSet(exercise.id, setNumber)}
-              onCompleteSet={(setNumber, reps, weight) => completeSet(exercise.id, setNumber, reps, weight)}
+              onCompleteSet={(setNumber, reps, weight, effectiveWeightUnit) => completeSet(exercise.id, setNumber, reps, weight, effectiveWeightUnit)}
+              onOpenMenu={() => setActiveExerciseMenu(exercise.id)}
             />
           ))}
 
@@ -416,6 +439,76 @@ export default function ActiveWorkoutScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* Exercise Settings Action Sheet */}
+      <Modal
+        visible={activeExerciseMenu !== null}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setActiveExerciseMenu(null)}
+      >
+        <Pressable
+          style={styles.actionSheetOverlay}
+          onPress={() => setActiveExerciseMenu(null)}
+        >
+          <Pressable
+            style={[styles.actionSheet, { backgroundColor: colors.cardElevated }]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={styles.actionSheetHandle} />
+
+            <Text style={[styles.actionSheetTitle, { color: colors.text }]}>
+              {getActiveExercise()?.name} Settings
+            </Text>
+
+            {/* Rest Timer Setting */}
+            <View style={styles.settingRow}>
+              <Text style={[styles.settingLabel, { color: colors.text }]}>Rest Timer</Text>
+              <SegmentedControl
+                options={[
+                  { label: '60s', value: '60' },
+                  { label: '90s', value: '90' },
+                  { label: '120s', value: '120' },
+                ]}
+                selectedValue={String(getActiveExercise()?.settings.restSecondsOverride ?? defaultRestSeconds)}
+                onValueChange={(value) => {
+                  if (activeExerciseMenu) {
+                    updateExerciseSettings(activeExerciseMenu, {
+                      restSecondsOverride: parseInt(value, 10)
+                    });
+                  }
+                }}
+              />
+            </View>
+
+            {/* Weight Unit Setting */}
+            <View style={styles.settingRow}>
+              <Text style={[styles.settingLabel, { color: colors.text }]}>Weight Unit</Text>
+              <SegmentedControl
+                options={[
+                  { label: 'kg', value: 'kg' },
+                  { label: 'lbs', value: 'lbs' },
+                ]}
+                selectedValue={getActiveExercise()?.settings.weightUnitOverride ?? weightUnit}
+                onValueChange={(value) => {
+                  if (activeExerciseMenu) {
+                    updateExerciseSettings(activeExerciseMenu, {
+                      weightUnitOverride: value as WeightUnit
+                    });
+                  }
+                }}
+              />
+            </View>
+
+            <Button
+              title="Done"
+              onPress={() => setActiveExerciseMenu(null)}
+              variant="primary"
+              style={{ marginTop: Spacing.lg }}
+            />
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -428,6 +521,7 @@ function ExerciseCard({
   onAddSet,
   onRemoveSet,
   onCompleteSet,
+  onOpenMenu,
 }: {
   exercise: WorkoutExercise;
   weightUnit: WeightUnit;
@@ -435,26 +529,30 @@ function ExerciseCard({
   onRemoveExercise: () => void;
   onAddSet: () => void;
   onRemoveSet: (setNumber: number) => void;
-  onCompleteSet: (setNumber: number, reps: number, weight: number) => void;
+  onCompleteSet: (setNumber: number, reps: number, weight: number, effectiveWeightUnit: WeightUnit) => void;
+  onOpenMenu: () => void;
 }) {
+  const effectiveWeightUnit = exercise.settings.weightUnitOverride ?? weightUnit;
+
   return (
-    <Card variant="filled" style={styles.exerciseCard} padding="md">
-      <View style={styles.exerciseHeader}>
-        <View style={styles.exerciseInfo}>
-          <Text style={[styles.exerciseName, { color: colors.text }]}>{exercise.name}</Text>
-          <Text style={[styles.exerciseEquipment, { color: colors.textTertiary }]}>
-            {EQUIPMENT_LABELS[exercise.equipment]}
-          </Text>
+    <SwipeableRow onDelete={onRemoveExercise}>
+      <Card variant="filled" style={styles.exerciseCard} padding="md">
+        <View style={styles.exerciseHeader}>
+          <View style={styles.exerciseInfo}>
+            <Text style={[styles.exerciseName, { color: colors.text }]}>{exercise.name}</Text>
+            <Text style={[styles.exerciseEquipment, { color: colors.textTertiary }]}>
+              {EQUIPMENT_LABELS[exercise.equipment]}
+            </Text>
+          </View>
+          <Pressable onPress={onOpenMenu} style={styles.menuButton}>
+            <Ionicons name="ellipsis-horizontal" size={20} color={colors.textSecondary} />
+          </Pressable>
         </View>
-        <Pressable onPress={onRemoveExercise} style={styles.removeButton}>
-          <Ionicons name="trash-outline" size={20} color={colors.error} />
-        </Pressable>
-      </View>
 
       <View style={styles.setsContainer}>
         <View style={styles.setHeaderRow}>
           <Text style={[styles.setHeaderText, { color: colors.textTertiary }]}>Set</Text>
-          <Text style={[styles.setHeaderText, { color: colors.textTertiary }]}>{weightUnit}</Text>
+          <Text style={[styles.setHeaderText, { color: colors.textTertiary }]}>{effectiveWeightUnit}</Text>
           <Text style={[styles.setHeaderText, { color: colors.textTertiary }]}>Reps</Text>
           <Text style={[styles.setHeaderText, { color: colors.textTertiary }]}></Text>
         </View>
@@ -463,9 +561,9 @@ function ExerciseCard({
           <SetRow
             key={set.setNumber}
             set={set}
-            weightUnit={weightUnit}
+            weightUnit={effectiveWeightUnit}
             colors={colors}
-            onComplete={(reps, weight) => onCompleteSet(set.setNumber, reps, weight)}
+            onComplete={(reps, weight) => onCompleteSet(set.setNumber, reps, weight, effectiveWeightUnit)}
             onRemove={() => onRemoveSet(set.setNumber)}
             canRemove={exercise.sets.length > 1}
           />
@@ -475,7 +573,8 @@ function ExerciseCard({
           <Text style={[styles.addSetText, { color: colors.primary }]}>+ Add Set</Text>
         </Pressable>
       </View>
-    </Card>
+      </Card>
+    </SwipeableRow>
   );
 }
 
@@ -627,19 +726,20 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    marginHorizontal: 4,
-    padding: Spacing.sm,
-    borderRadius: Radius.medium,
+    marginHorizontal: 3,
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.sm,
+    borderRadius: Radius.small,
     textAlign: 'center',
-    ...Typography.body,
+    ...Typography.footnote,
   },
   completeButton: {
-    flex: 1,
+    width: 32,
+    height: 32,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: Spacing.sm,
-    borderRadius: Radius.medium,
-    marginLeft: 4,
+    borderRadius: Radius.small,
+    marginLeft: 3,
   },
   addSetButton: { padding: Spacing.sm, alignItems: 'center', marginTop: Spacing.sm },
   addSetText: { ...Typography.subhead, fontWeight: '500' },
@@ -763,5 +863,40 @@ const styles = StyleSheet.create({
   miniTimerText: {
     fontWeight: '600',
     fontSize: 14,
+  },
+  // Action sheet styles
+  actionSheetOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  actionSheet: {
+    padding: Spacing.lg,
+    paddingBottom: Spacing.xxxl,
+    borderTopLeftRadius: Radius.xl,
+    borderTopRightRadius: Radius.xl,
+  },
+  actionSheetHandle: {
+    width: 36,
+    height: 4,
+    backgroundColor: '#ccc',
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: Spacing.lg,
+  },
+  actionSheetTitle: {
+    ...Typography.headline,
+    textAlign: 'center',
+    marginBottom: Spacing.lg,
+  },
+  settingRow: {
+    marginBottom: Spacing.lg,
+  },
+  settingLabel: {
+    ...Typography.subhead,
+    marginBottom: Spacing.sm,
+  },
+  menuButton: {
+    padding: Spacing.sm,
   },
 });
