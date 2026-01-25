@@ -12,6 +12,7 @@ A modern, feature-rich workout tracking app built with React Native and Expo. Tr
 - **Progress Insights** - Track your fitness journey over time
 - **Dark Mode** - Automatic theme based on system preference
 - **Customizable Settings** - Weight units (kg/lbs), rest duration, and more
+- **Feedback System** - Built-in bug reporting and feature suggestions (Settings → Send Feedback)
 
 ## Screenshots
 
