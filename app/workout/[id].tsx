@@ -6,7 +6,8 @@ import { useTemplateExercises, useAllExercises } from '@/hooks/useWorkoutTemplat
 import { useSettings, convertWeight, convertToKg, WeightUnit } from '@/hooks/useSettings';
 import { Ionicons } from '@expo/vector-icons';
 import { db } from '@/db';
-import { workoutSessions, setLogs } from '@/db/schema';
+import { workoutSessions, setLogs, workoutTemplates } from '@/db/schema';
+import { eq } from 'drizzle-orm';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { Audio } from 'expo-av';
@@ -137,6 +138,25 @@ export default function ActiveWorkoutScreen() {
       setShowRestOverlay(false);
     }
   }, [restSeconds]);
+
+  // Fetch template name for history display
+  useEffect(() => {
+    if (!id) return;
+
+    async function fetchTemplateName() {
+      const result = await db
+        .select({ name: workoutTemplates.name })
+        .from(workoutTemplates)
+        .where(eq(workoutTemplates.id, id))
+        .limit(1);
+
+      if (result[0]) {
+        templateNameRef.current = result[0].name;
+      }
+    }
+
+    fetchTemplateName();
+  }, [id]);
 
   const addExercise = (exercise: { id: string; name: string; equipment: string }) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
