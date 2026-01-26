@@ -1,17 +1,44 @@
 # Workout Tracker
 
-A modern, feature-rich workout tracking app built with React Native and Expo. Track your workouts, monitor progress, and achieve your fitness goals.
+A modern, feature-rich workout tracking app built with React Native and Expo. Track your workouts, monitor progress, and achieve your fitness goals with an intuitive and beautiful interface.
+
+[![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![React Native](https://img.shields.io/badge/React%20Native-0.81.5-61dafb.svg)](https://reactnative.dev/)
+[![Expo](https://img.shields.io/badge/Expo-54.0.31-000020.svg)](https://expo.dev/)
+
+---
+
+## Table of Contents
+
+- [Features](#features)
+- [Screenshots](#screenshots)
+- [Tech Stack](#tech-stack)
+- [Getting Started](#getting-started)
+- [Project Structure](#project-structure)
+- [Contributing](#contributing)
+- [License](#license)
+- [Acknowledgments](#acknowledgments)
+
+---
 
 ## Features
 
-- **Workout Templates** - Create and manage custom workout routines
-- **Exercise Library** - Built-in database of exercises organized by muscle group and equipment
+### Workout Management
+- **Workout Splits** - Organize workouts into splits (e.g., "4-Day Upper/Lower", "Push/Pull/Legs")
+- **Workout Templates** - Create and manage custom workout routines with day-of-week scheduling
 - **Live Workout Tracking** - Real-time session timer with set logging
 - **Rest Timer** - Configurable rest periods with sound notifications
+
+### Exercise Library
+- **170+ Exercises** - Built-in database organized by muscle group and equipment
+
+### Progress Tracking
 - **Workout History** - View past sessions with duration and stats
 - **Progress Insights** - Track your fitness journey over time
+
+### Customization
 - **Dark Mode** - Automatic theme based on system preference
-- **Customizable Settings** - Weight units (kg/lbs), rest duration, and more
+- **Settings** - Weight units (kg/lbs), rest duration, and more
 - **Feedback System** - Built-in bug reporting and feature suggestions (Settings → Send Feedback)
 
 ## Screenshots
@@ -22,11 +49,16 @@ A modern, feature-rich workout tracking app built with React Native and Expo. Tr
 
 ## Tech Stack
 
-- **Framework**: [React Native](https://reactnative.dev/) with [Expo](https://expo.dev/)
-- **Navigation**: [Expo Router](https://docs.expo.dev/router/introduction/)
-- **Database**: [Expo SQLite](https://docs.expo.dev/versions/latest/sdk/sqlite/) with [Drizzle ORM](https://orm.drizzle.team/)
-- **Audio**: [Expo AV](https://docs.expo.dev/versions/latest/sdk/av/)
-- **Haptics**: [Expo Haptics](https://docs.expo.dev/versions/latest/sdk/haptics/)
+| Category | Technology | Version |
+|----------|------------|---------|
+| Framework | [React Native](https://reactnative.dev/) | 0.81.5 |
+| Platform | [Expo](https://expo.dev/) | 54.0.31 |
+| Navigation | [Expo Router](https://docs.expo.dev/router/introduction/) | 6.0.22 |
+| Database | [Expo SQLite](https://docs.expo.dev/versions/latest/sdk/sqlite/) + [Drizzle ORM](https://orm.drizzle.team/) | 16.0.10 / 0.45.1 |
+| Animations | [React Native Reanimated](https://docs.swmansion.com/react-native-reanimated/) | 4.1.1 |
+| Gestures | [React Native Gesture Handler](https://docs.swmansion.com/react-native-gesture-handler/) | 2.28.0 |
+| Audio | [Expo AV](https://docs.expo.dev/versions/latest/sdk/av/) | 16.0.8 |
+| Haptics | [Expo Haptics](https://docs.expo.dev/versions/latest/sdk/haptics/) | 15.0.8 |
 
 ## Getting Started
 
@@ -75,29 +107,47 @@ eas build --platform android
 ```
 workout-tracker/
 ├── app/                    # App screens (Expo Router)
-│   ├── (tabs)/            # Tab navigation screens
-│   ├── workout/           # Workout-related screens
-│   └── settings.tsx       # Settings screen
+│   ├── (tabs)/            # Tab navigation screens (workout, history, insights)
+│   ├── workout/           # Workout modals ([id], empty, create-split)
+│   ├── settings.tsx       # Settings screen
+│   └── feedback.tsx       # Bug report / feature request
 ├── components/            # Reusable components
-│   ├── ui/               # Base UI components
-│   ├── dashboard/        # Dashboard widgets
+│   ├── ui/               # Base UI components (Button, Card, Input, etc.)
+│   ├── dashboard/        # Dashboard widgets (WeekCalendar, StreakDisplay, etc.)
+│   ├── workout/          # Workout session components
+│   ├── history/          # History list components
+│   ├── insights/         # Analytics components
+│   ├── animations/       # Animation components (Confetti, PRCelebration)
 │   └── wizard/           # Multi-step form components
-├── constants/            # Design tokens and constants
-├── contexts/             # React contexts
-├── db/                   # Database schema and seeds
-├── hooks/                # Custom React hooks
-└── assets/               # Images, fonts, and sounds
+├── constants/            # Design tokens (Colors, Typography, Spacing, Shadows)
+├── contexts/             # React contexts (Database, Theme)
+├── db/                   # Database layer (schema, migrations, seed)
+├── hooks/                # Custom React hooks (7 data management hooks)
+├── utils/                # Utility functions (haptics)
+└── assets/               # Fonts (DM Sans) and sounds
 ```
+
+For detailed architecture documentation, see [docs/CODEMAPS/](docs/CODEMAPS/INDEX.md).
 
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
+### Development Guidelines
+
 1. Fork the repository
 2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+3. Follow existing code style and patterns
+4. Test your changes thoroughly
+5. Commit your changes (`git commit -m 'Add some amazing feature'`)
+6. Push to the branch (`git push origin feature/amazing-feature`)
+7. Open a Pull Request
+
+### Code Style
+
+- Use TypeScript for all new code
+- Follow the existing component patterns in `components/`
+- Use the design tokens from `constants/` (Colors, Typography, Spacing)
 
 ## License
 
@@ -107,3 +157,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - Exercise data inspired by common gym routines
 - Timer sound from [Mixkit](https://mixkit.co/)
+- Typography: [DM Sans](https://fonts.google.com/specimen/DM+Sans) by Colophon Foundry
+- Icons: [@expo/vector-icons](https://icons.expo.fyi/)
