@@ -1,13 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import { db } from '@/db';
 import { workoutSessions, workoutTemplates, templateExercises } from '@/db/schema';
-import { eq, desc, gte, isNotNull, and } from 'drizzle-orm';
+import { eq, desc, gte, isNotNull, and, inArray, sql } from 'drizzle-orm';
 import { TemplateWithDetails } from './useWorkoutTemplates';
 
 export interface DashboardData {
   thisWeek: {
     workoutCount: number;
     streak: number;
+    workoutDays: number[]; // Days of the week with workouts (0=Mon, 6=Sun)
   };
   suggestedWorkout: {
     template: TemplateWithDetails;
@@ -59,7 +60,7 @@ function formatReason(template: TemplateWithDetails, currentDayOfWeek: number): 
 
 export function useWorkoutDashboard() {
   const [data, setData] = useState<DashboardData>({
-    thisWeek: { workoutCount: 0, streak: 0 },
+    thisWeek: { workoutCount: 0, streak: 0, workoutDays: [] },
     suggestedWorkout: null,
     hasHistory: false,
     workedOutToday: false,
@@ -89,6 +90,18 @@ export function useWorkoutDashboard() {
         );
 
       const workoutCount = weekSessions.length;
+
+      // Calculate which days of the week had workouts (0=Mon, 6=Sun)
+      const workoutDaysSet = new Set<number>();
+      for (const session of weekSessions) {
+        if (session.completedAt) {
+          const dayOfWeek = session.completedAt.getDay();
+          // Convert to Monday=0 format
+          const adjustedDay = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+          workoutDaysSet.add(adjustedDay);
+        }
+      }
+      const workoutDays = Array.from(workoutDaysSet).sort((a, b) => a - b);
 
       // Check if worked out today
       const todaySessions = weekSessions.filter(
@@ -136,32 +149,42 @@ export function useWorkoutDashboard() {
       let suggestedWorkout: DashboardData['suggestedWorkout'] = null;
 
       if (allTemplates.length > 0) {
-        // Get template details
-        const templatesWithDetails = await Promise.all(
-          allTemplates.map(async (template) => {
-            const exerciseList = await db
-              .select()
-              .from(templateExercises)
-              .where(eq(templateExercises.templateId, template.id));
+        const templateIds = allTemplates.map(t => t.id);
 
-            const lastSession = await db
-              .select()
-              .from(workoutSessions)
-              .where(eq(workoutSessions.templateId, template.id))
-              .orderBy(desc(workoutSessions.completedAt))
-              .limit(1);
-
-            return {
-              id: template.id,
-              name: template.name,
-              type: template.type,
-              orderIndex: template.orderIndex,
-              dayOfWeek: template.dayOfWeek,
-              exerciseCount: exerciseList.length,
-              lastPerformed: lastSession[0]?.completedAt || null,
-            };
+        // Batch query 1: Get exercise counts per template
+        const exerciseCountResults = await db
+          .select({
+            templateId: templateExercises.templateId,
+            count: sql<number>`COUNT(*)`,
           })
-        );
+          .from(templateExercises)
+          .where(inArray(templateExercises.templateId, templateIds))
+          .groupBy(templateExercises.templateId);
+
+        const exerciseCounts = new Map(exerciseCountResults.map(r => [r.templateId, r.count]));
+
+        // Batch query 2: Get last session per template
+        const lastSessions = await db
+          .select({
+            templateId: workoutSessions.templateId,
+            completedAt: sql<Date>`MAX(${workoutSessions.completedAt})`,
+          })
+          .from(workoutSessions)
+          .where(inArray(workoutSessions.templateId, templateIds))
+          .groupBy(workoutSessions.templateId);
+
+        const lastPerformed = new Map(lastSessions.map(s => [s.templateId!, s.completedAt]));
+
+        // Build templates with details using the batch results
+        const templatesWithDetails: TemplateWithDetails[] = allTemplates.map(template => ({
+          id: template.id,
+          name: template.name,
+          type: template.type,
+          orderIndex: template.orderIndex,
+          dayOfWeek: template.dayOfWeek,
+          exerciseCount: exerciseCounts.get(template.id) ?? 0,
+          lastPerformed: lastPerformed.get(template.id) ?? null,
+        }));
 
         // Find the best suggestion
         // Priority 1: Template scheduled for today (by dayOfWeek)
@@ -193,7 +216,7 @@ export function useWorkoutDashboard() {
       }
 
       setData({
-        thisWeek: { workoutCount, streak },
+        thisWeek: { workoutCount, streak, workoutDays },
         suggestedWorkout,
         hasHistory,
         workedOutToday,

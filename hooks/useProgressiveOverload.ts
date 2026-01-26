@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { db } from '@/db';
 import { exercises, setLogs, workoutSessions, templateExercises } from '@/db/schema';
-import { eq, desc, isNotNull, and } from 'drizzle-orm';
+import { eq, desc, isNotNull, and, inArray } from 'drizzle-orm';
 
 export type ProgressStatus = 'progressing' | 'maintaining' | 'stalled';
 
@@ -96,95 +96,121 @@ export function useProgressiveOverload(options?: ProgressiveOverloadOptions) {
       // Get unique exercise IDs
       const exerciseIds = [...new Set(templateExercisesList.map(te => te.exerciseId))];
 
+      if (exerciseIds.length === 0) {
+        setExerciseProgress([]);
+        setError(null);
+        return;
+      }
+
+      // Batch query: Get all exercise details in one query
+      const exerciseDetailsList = await db
+        .select()
+        .from(exercises)
+        .where(inArray(exercises.id, exerciseIds));
+
+      const exerciseMap = new Map(exerciseDetailsList.map(e => [e.id, e]));
+
+      // Fetch sessions once (same for all exercises based on options)
+      let completedSessions: { id: string; completedAt: Date | null; templateId: string | null; templateName: string }[];
+
+      if (options?.sessionId) {
+        completedSessions = await db
+          .select({
+            id: workoutSessions.id,
+            completedAt: workoutSessions.completedAt,
+            templateId: workoutSessions.templateId,
+            templateName: workoutSessions.templateName,
+          })
+          .from(workoutSessions)
+          .where(and(
+            isNotNull(workoutSessions.completedAt),
+            eq(workoutSessions.id, options.sessionId)
+          ))
+          .orderBy(desc(workoutSessions.completedAt));
+      } else if (options?.templateId) {
+        completedSessions = await db
+          .select({
+            id: workoutSessions.id,
+            completedAt: workoutSessions.completedAt,
+            templateId: workoutSessions.templateId,
+            templateName: workoutSessions.templateName,
+          })
+          .from(workoutSessions)
+          .where(and(
+            isNotNull(workoutSessions.completedAt),
+            eq(workoutSessions.templateId, options.templateId)
+          ))
+          .orderBy(desc(workoutSessions.completedAt));
+      } else {
+        completedSessions = await db
+          .select({
+            id: workoutSessions.id,
+            completedAt: workoutSessions.completedAt,
+            templateId: workoutSessions.templateId,
+            templateName: workoutSessions.templateName,
+          })
+          .from(workoutSessions)
+          .where(isNotNull(workoutSessions.completedAt))
+          .orderBy(desc(workoutSessions.completedAt));
+      }
+
+      const sessionIds = completedSessions.map(s => s.id);
+      const sessionMap = new Map(completedSessions.map(s => [s.id, s]));
+
+      // Batch query: Get all set logs for all exercises in all sessions at once
+      const allSetLogs = sessionIds.length > 0 && exerciseIds.length > 0
+        ? await db
+            .select()
+            .from(setLogs)
+            .where(
+              and(
+                inArray(setLogs.sessionId, sessionIds),
+                inArray(setLogs.exerciseId, exerciseIds)
+              )
+            )
+        : [];
+
+      // Group set logs by exerciseId for efficient lookup
+      const setLogsByExercise = new Map<string, typeof allSetLogs>();
+      for (const log of allSetLogs) {
+        const existing = setLogsByExercise.get(log.exerciseId);
+        if (existing) {
+          existing.push(log);
+        } else {
+          setLogsByExercise.set(log.exerciseId, [log]);
+        }
+      }
+
       const progressList: ExerciseProgress[] = [];
 
+      // Process each exercise using the pre-fetched data (no additional queries)
       for (const exerciseId of exerciseIds) {
-        // Get exercise details
-        const exerciseDetails = await db
-          .select()
-          .from(exercises)
-          .where(eq(exercises.id, exerciseId))
-          .limit(1);
+        const exercise = exerciseMap.get(exerciseId);
+        if (!exercise) continue;
 
-        if (exerciseDetails.length === 0) continue;
-
-        const exercise = exerciseDetails[0];
         const templateEx = templateExercisesList.find(te => te.exerciseId === exerciseId);
         if (!templateEx) continue;
 
-        // Build session query with optional filters
-        let completedSessions: { id: string; completedAt: Date | null; templateId: string | null; templateName: string }[];
+        const exerciseSets = setLogsByExercise.get(exerciseId) || [];
 
-        if (options?.sessionId) {
-          // Filter by specific session
-          completedSessions = await db
-            .select({
-              id: workoutSessions.id,
-              completedAt: workoutSessions.completedAt,
-              templateId: workoutSessions.templateId,
-              templateName: workoutSessions.templateName,
-            })
-            .from(workoutSessions)
-            .where(and(
-              isNotNull(workoutSessions.completedAt),
-              eq(workoutSessions.id, options.sessionId)
-            ))
-            .orderBy(desc(workoutSessions.completedAt));
-        } else if (options?.templateId) {
-          // Filter by template
-          completedSessions = await db
-            .select({
-              id: workoutSessions.id,
-              completedAt: workoutSessions.completedAt,
-              templateId: workoutSessions.templateId,
-              templateName: workoutSessions.templateName,
-            })
-            .from(workoutSessions)
-            .where(and(
-              isNotNull(workoutSessions.completedAt),
-              eq(workoutSessions.templateId, options.templateId)
-            ))
-            .orderBy(desc(workoutSessions.completedAt));
-        } else {
-          // No filter - get all completed sessions
-          completedSessions = await db
-            .select({
-              id: workoutSessions.id,
-              completedAt: workoutSessions.completedAt,
-              templateId: workoutSessions.templateId,
-              templateName: workoutSessions.templateName,
-            })
-            .from(workoutSessions)
-            .where(isNotNull(workoutSessions.completedAt))
-            .orderBy(desc(workoutSessions.completedAt));
-        }
-
-        // Get sets for this exercise from completed sessions
         const allSets: {
           sessionId: string;
           weight: number;
           reps: number;
           completedAt: Date;
           templateName: string;
-        }[] = [];
-
-        for (const session of completedSessions) {
-          const sessionSets = await db
-            .select()
-            .from(setLogs)
-            .where(eq(setLogs.sessionId, session.id));
-
-          const exerciseSets = sessionSets.filter(s => s.exerciseId === exerciseId);
-          for (const set of exerciseSets) {
-            allSets.push({
-              sessionId: session.id,
+        }[] = exerciseSets
+          .filter(set => sessionMap.has(set.sessionId))
+          .map(set => {
+            const session = sessionMap.get(set.sessionId)!;
+            return {
+              sessionId: set.sessionId,
               weight: set.weight,
               reps: set.reps,
               completedAt: session.completedAt!,
               templateName: session.templateName,
-            });
-          }
-        }
+            };
+          });
 
         if (allSets.length === 0) {
           progressList.push({
