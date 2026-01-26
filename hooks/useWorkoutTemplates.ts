@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { db } from '@/db';
 import { workoutTemplates, templateExercises, exercises, workoutSessions, workoutSplits } from '@/db/schema';
-import { eq, desc, isNull, inArray } from 'drizzle-orm';
+import { eq, desc, isNull, inArray, sql } from 'drizzle-orm';
 
 export type TemplateWithDetails = {
   id: string;
@@ -20,6 +20,46 @@ export type SplitWithTemplates = {
   templates: TemplateWithDetails[];
 };
 
+// Helper type for internal use with splitId
+type TemplateWithSplitId = TemplateWithDetails & { splitId: string | null };
+
+// Batch helper: Get exercise counts and last performed dates for all templates
+async function fetchTemplateDetails(templateIds: string[]): Promise<{
+  exerciseCounts: Map<string, number>;
+  lastPerformed: Map<string, Date | null>;
+}> {
+  if (templateIds.length === 0) {
+    return { exerciseCounts: new Map(), lastPerformed: new Map() };
+  }
+
+  // Batch query 1: Get exercise counts per template
+  const exerciseCountResults = await db
+    .select({
+      templateId: templateExercises.templateId,
+      count: sql<number>`COUNT(*)`,
+    })
+    .from(templateExercises)
+    .where(inArray(templateExercises.templateId, templateIds))
+    .groupBy(templateExercises.templateId);
+
+  const exerciseCounts = new Map(exerciseCountResults.map(r => [r.templateId, r.count]));
+
+  // Batch query 2: Get last session per template using a subquery approach
+  // We get all completed sessions for these templates, ordered by completedAt
+  const lastSessions = await db
+    .select({
+      templateId: workoutSessions.templateId,
+      completedAt: sql<Date>`MAX(${workoutSessions.completedAt})`,
+    })
+    .from(workoutSessions)
+    .where(inArray(workoutSessions.templateId, templateIds))
+    .groupBy(workoutSessions.templateId);
+
+  const lastPerformed = new Map(lastSessions.map(s => [s.templateId!, s.completedAt]));
+
+  return { exerciseCounts, lastPerformed };
+}
+
 export function useWorkoutSplits() {
   const [splits, setSplits] = useState<SplitWithTemplates[]>([]);
   const [standaloneTemplates, setStandaloneTemplates] = useState<TemplateWithDetails[]>([]);
@@ -36,33 +76,33 @@ export function useWorkoutSplits() {
       // Get all templates
       const allTemplates = await db.select().from(workoutTemplates);
 
-      // For each template, get exercise count and last performed date
-      const templatesWithDetails = await Promise.all(
-        allTemplates.map(async (template) => {
-          const exerciseList = await db
-            .select()
-            .from(templateExercises)
-            .where(eq(templateExercises.templateId, template.id));
+      if (allTemplates.length === 0) {
+        setSplits(allSplits.map(split => ({
+          id: split.id,
+          name: split.name,
+          description: split.description,
+          templates: [],
+        })));
+        setStandaloneTemplates([]);
+        setError(null);
+        return;
+      }
 
-          const lastSession = await db
-            .select()
-            .from(workoutSessions)
-            .where(eq(workoutSessions.templateId, template.id))
-            .orderBy(desc(workoutSessions.completedAt))
-            .limit(1);
+      // Batch fetch template details (exercise counts and last performed)
+      const templateIds = allTemplates.map(t => t.id);
+      const { exerciseCounts, lastPerformed } = await fetchTemplateDetails(templateIds);
 
-          return {
-            id: template.id,
-            splitId: template.splitId,
-            name: template.name,
-            type: template.type,
-            orderIndex: template.orderIndex,
-            dayOfWeek: template.dayOfWeek,
-            exerciseCount: exerciseList.length,
-            lastPerformed: lastSession[0]?.completedAt || null,
-          };
-        })
-      );
+      // Build templates with details using the batch results
+      const templatesWithDetails: TemplateWithSplitId[] = allTemplates.map(template => ({
+        id: template.id,
+        splitId: template.splitId,
+        name: template.name,
+        type: template.type,
+        orderIndex: template.orderIndex,
+        dayOfWeek: template.dayOfWeek,
+        exerciseCount: exerciseCounts.get(template.id) ?? 0,
+        lastPerformed: lastPerformed.get(template.id) ?? null,
+      }));
 
       // Group templates by split
       const splitsWithTemplates = allSplits.map(split => ({
@@ -109,31 +149,26 @@ export function useWorkoutTemplates() {
 
       const allTemplates = await db.select().from(workoutTemplates);
 
-      const templatesWithDetails = await Promise.all(
-        allTemplates.map(async (template) => {
-          const exerciseList = await db
-            .select()
-            .from(templateExercises)
-            .where(eq(templateExercises.templateId, template.id));
+      if (allTemplates.length === 0) {
+        setTemplates([]);
+        setError(null);
+        return;
+      }
 
-          const lastSession = await db
-            .select()
-            .from(workoutSessions)
-            .where(eq(workoutSessions.templateId, template.id))
-            .orderBy(desc(workoutSessions.completedAt))
-            .limit(1);
+      // Batch fetch template details (exercise counts and last performed)
+      const templateIds = allTemplates.map(t => t.id);
+      const { exerciseCounts, lastPerformed } = await fetchTemplateDetails(templateIds);
 
-          return {
-            id: template.id,
-            name: template.name,
-            type: template.type,
-            orderIndex: template.orderIndex,
-            dayOfWeek: template.dayOfWeek,
-            exerciseCount: exerciseList.length,
-            lastPerformed: lastSession[0]?.completedAt || null,
-          };
-        })
-      );
+      // Build templates with details using the batch results
+      const templatesWithDetails: TemplateWithDetails[] = allTemplates.map(template => ({
+        id: template.id,
+        name: template.name,
+        type: template.type,
+        orderIndex: template.orderIndex,
+        dayOfWeek: template.dayOfWeek,
+        exerciseCount: exerciseCounts.get(template.id) ?? 0,
+        lastPerformed: lastPerformed.get(template.id) ?? null,
+      }));
 
       setTemplates(templatesWithDetails);
       setError(null);
