@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-01-26
+
+### Added
+- **Workout Splits**: Organize workout templates into splits (e.g., "4-Day Upper/Lower", "Push/Pull/Legs")
+- **Day-of-Week Scheduling**: Assign workout templates to specific days for smart suggestions
+- **Swipe-to-Delete**: Delete splits and templates with swipe gestures using `SwipeableRow` component
+- **Dashboard Improvements**:
+  - `WeekCalendar`: Horizontal week view showing workout days
+  - `StreakDisplay`: Current workout streak with fire icon
+  - `StreakMilestone`: Celebration animations for streak achievements
+  - `SuggestedWorkoutCard`: Smart workout recommendations based on schedule and recency
+  - `QuickStatsCard`: Weekly workout count summary
+- **Progress Sparklines**: Visual mini line charts for progress trends in Insights tab
+- **Architecture Documentation**: Comprehensive codemaps in `docs/CODEMAPS/`
+
+### Changed
+- Database schema updated with `workout_splits` table
+- Templates now belong to splits (with backward compatibility for standalone templates)
+- Improved workout suggestion algorithm prioritizes scheduled workouts, then least-recently-performed
+
 ## [0.6.0] - 2026-01-25
 
 ### Added

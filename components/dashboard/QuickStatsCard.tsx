@@ -1,54 +1,110 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Text, useColors } from '@/components/Themed';
 import { Card } from '@/components/ui';
-import { Typography } from '@/constants/Typography';
-import { Spacing } from '@/constants/Spacing';
+import { Typography, TextStyles } from '@/constants/Typography';
+import { Spacing, Radius } from '@/constants/Spacing';
 import { Ionicons } from '@expo/vector-icons';
+import { StreakDisplay } from './StreakDisplay';
+import { WeekCalendar } from './WeekCalendar';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withSpring,
+  withDelay,
+  Easing,
+  FadeInDown,
+} from 'react-native-reanimated';
 
 interface QuickStatsCardProps {
   workoutCount: number;
   streak: number;
   hasHistory: boolean;
+  workoutDays?: number[]; // Days of the week that had workouts (0=Mon, 6=Sun)
 }
 
-export function QuickStatsCard({ workoutCount, streak, hasHistory }: QuickStatsCardProps) {
+export function QuickStatsCard({
+  workoutCount,
+  streak,
+  hasHistory,
+  workoutDays = [],
+}: QuickStatsCardProps) {
   const colors = useColors();
+  const countAnimation = useSharedValue(0);
+
+  useEffect(() => {
+    if (hasHistory) {
+      // Animate count up
+      countAnimation.value = withDelay(
+        200,
+        withTiming(workoutCount, {
+          duration: 800,
+          easing: Easing.out(Easing.cubic),
+        })
+      );
+    }
+  }, [workoutCount, hasHistory]);
+
+  const countStyle = useAnimatedStyle(() => ({
+    opacity: withSpring(1, { damping: 20 }),
+  }));
 
   if (!hasHistory) {
     return (
-      <Card variant="filled" style={styles.container} padding="md">
-        <View style={styles.emptyState}>
-          <Ionicons name="fitness-outline" size={20} color={colors.textTertiary} />
-          <Text style={[styles.emptyText, { color: colors.textTertiary }]}>
-            Complete your first workout to see stats
+      <Card variant="filled" style={styles.container} padding="lg">
+        <Animated.View
+          entering={FadeInDown.duration(400)}
+          style={styles.emptyState}
+        >
+          <View style={[styles.emptyIconContainer, { backgroundColor: colors.fillTertiary }]}>
+            <Ionicons name="barbell-outline" size={28} color={colors.textTertiary} />
+          </View>
+          <Text style={[styles.emptyTitle, { color: colors.text }]}>
+            Start Your Journey
           </Text>
-        </View>
+          <Text style={[styles.emptyText, { color: colors.textTertiary }]}>
+            Complete your first workout to track your progress
+          </Text>
+        </Animated.View>
       </Card>
     );
   }
 
   return (
-    <Card variant="filled" style={styles.container} padding="md">
+    <Card variant="filled" style={styles.container} padding="lg">
+      {/* Header */}
       <View style={styles.header}>
-        <Ionicons name="stats-chart" size={16} color={colors.textSecondary} />
-        <Text style={[styles.headerText, { color: colors.textSecondary }]}>THIS WEEK</Text>
+        <View style={styles.headerLeft}>
+          <Ionicons name="calendar-outline" size={14} color={colors.textTertiary} />
+          <Text style={[styles.headerText, { color: colors.textTertiary }]}>THIS WEEK</Text>
+        </View>
       </View>
+
+      {/* Main Stats Row */}
       <View style={styles.statsRow}>
-        <View style={styles.statItem}>
-          <Text style={[styles.statValue, { color: colors.text }]}>{workoutCount}</Text>
-          <Text style={[styles.statLabel, { color: colors.textTertiary }]}>
-            {workoutCount === 1 ? 'workout' : 'workouts'}
+        {/* Workout Count */}
+        <Animated.View style={[styles.statItem, countStyle]}>
+          <Text style={[styles.statValue, { color: colors.text }]}>
+            {workoutCount}
           </Text>
-        </View>
-        <View style={[styles.separator, { backgroundColor: colors.separator }]} />
+          <Text style={[styles.statLabel, { color: colors.textTertiary }]}>
+            {workoutCount === 1 ? 'WORKOUT' : 'WORKOUTS'}
+          </Text>
+        </Animated.View>
+
+        {/* Divider */}
+        <View style={[styles.divider, { backgroundColor: colors.separator }]} />
+
+        {/* Streak */}
         <View style={styles.statItem}>
-          <View style={styles.streakValue}>
-            <Ionicons name="flame" size={18} color={colors.systemOrange} />
-            <Text style={[styles.statValue, { color: colors.text }]}>{streak}</Text>
-          </View>
-          <Text style={[styles.statLabel, { color: colors.textTertiary }]}>day streak</Text>
+          <StreakDisplay streak={streak} size="md" />
         </View>
+      </View>
+
+      {/* Week Calendar */}
+      <View style={styles.calendarContainer}>
+        <WeekCalendar workoutDays={workoutDays} />
       </View>
     </Card>
   );
@@ -59,49 +115,64 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: Spacing.lg,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: Spacing.xs,
-    marginBottom: Spacing.sm,
   },
   headerText: {
-    ...Typography.caption1,
-    fontWeight: '600',
-    letterSpacing: 0.5,
+    ...TextStyles.statLabel,
   },
   statsRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.lg,
   },
   statItem: {
     flex: 1,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   statValue: {
-    ...Typography.title2,
-    fontWeight: '700',
+    ...TextStyles.statValue,
   },
   statLabel: {
-    ...Typography.caption1,
-    marginTop: 2,
+    ...TextStyles.statLabel,
+    marginTop: Spacing.xs,
   },
-  streakValue: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
-  },
-  separator: {
+  divider: {
     width: 1,
-    height: 32,
-    marginHorizontal: Spacing.md,
+    height: 48,
+    marginHorizontal: Spacing.lg,
+  },
+  calendarContainer: {
+    paddingTop: Spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(150, 150, 150, 0.2)',
   },
   emptyState: {
-    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: Spacing.md,
+  },
+  emptyIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: Spacing.sm,
-    paddingVertical: Spacing.xs,
+    marginBottom: Spacing.md,
+  },
+  emptyTitle: {
+    ...Typography.headline,
+    marginBottom: Spacing.xs,
   },
   emptyText: {
     ...Typography.footnote,
+    textAlign: 'center',
   },
 });
 

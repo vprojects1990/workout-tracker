@@ -4,11 +4,12 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withSpring,
+  withSequence,
 } from 'react-native-reanimated';
-import * as Haptics from 'expo-haptics';
 import { useColors } from '@/components/Themed';
 import { Radius, Spacing } from '@/constants/Spacing';
 import { Shadows, ShadowStyles } from '@/constants/Shadows';
+import { haptics } from '@/utils/haptics';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -22,6 +23,25 @@ interface CardProps {
   style?: StyleProp<ViewStyle>;
   padding?: 'none' | 'sm' | 'md' | 'lg';
 }
+
+// Spring configurations for satisfying press animations
+const SPRING_CONFIGS = {
+  pressIn: {
+    damping: 15,
+    stiffness: 350,
+    mass: 0.8,
+  },
+  pressOut: {
+    damping: 12,
+    stiffness: 180,
+    mass: 0.8,
+  },
+  bounce: {
+    damping: 10,
+    stiffness: 300,
+    mass: 0.6,
+  },
+};
 
 export function Card({
   children,
@@ -40,20 +60,25 @@ export function Card({
 
   const handlePressIn = () => {
     if (onPress) {
-      scale.value = withSpring(0.98, { damping: 15, stiffness: 400 });
+      // Quick, responsive press down
+      scale.value = withSpring(0.97, SPRING_CONFIGS.pressIn);
     }
   };
 
   const handlePressOut = () => {
     if (onPress) {
-      scale.value = withSpring(1, { damping: 15, stiffness: 400 });
+      // Bounce back with subtle overshoot for satisfying release
+      scale.value = withSequence(
+        withSpring(1.01, SPRING_CONFIGS.bounce),
+        withSpring(1, SPRING_CONFIGS.pressOut)
+      );
     }
   };
 
   const handlePress = () => {
     if (!onPress) return;
     if (hapticFeedback) {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      haptics.tap();
     }
     onPress();
   };

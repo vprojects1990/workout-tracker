@@ -11,12 +11,15 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withSpring,
+  withSequence,
+  withTiming,
+  Easing,
 } from 'react-native-reanimated';
-import * as Haptics from 'expo-haptics';
 import { useColors } from '@/components/Themed';
 import { Typography } from '@/constants/Typography';
 import { Radius, Layout, Spacing } from '@/constants/Spacing';
 import { Shadows } from '@/constants/Shadows';
+import { haptics } from '@/utils/haptics';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -37,6 +40,26 @@ interface ButtonProps {
   style?: ViewStyle;
   textStyle?: TextStyle;
 }
+
+// Spring configurations for different button variants
+const SPRING_CONFIGS = {
+  pressIn: {
+    damping: 15,
+    stiffness: 400,
+    mass: 0.8,
+  },
+  pressOut: {
+    damping: 12,
+    stiffness: 200,
+    mass: 0.8,
+    overshootClamping: false,
+  },
+  bounce: {
+    damping: 8,
+    stiffness: 350,
+    mass: 0.6,
+  },
+};
 
 export function Button({
   title,
@@ -60,18 +83,34 @@ export function Button({
   }));
 
   const handlePressIn = () => {
-    scale.value = withSpring(0.97, { damping: 15, stiffness: 400 });
+    // Quick press down with tight spring
+    scale.value = withSpring(0.95, SPRING_CONFIGS.pressIn);
   };
 
   const handlePressOut = () => {
-    scale.value = withSpring(1, { damping: 15, stiffness: 400 });
+    // Bounce back with overshoot for satisfying release feel
+    scale.value = withSequence(
+      // First overshoot slightly above 1
+      withSpring(1.02, SPRING_CONFIGS.bounce),
+      // Then settle back to 1 with gentle spring
+      withSpring(1, SPRING_CONFIGS.pressOut)
+    );
   };
 
   const handlePress = () => {
     if (disabled || loading) return;
+
+    // Use standardized haptic feedback based on variant
     if (hapticFeedback) {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      if (variant === 'destructive') {
+        haptics.warning();
+      } else if (variant === 'primary') {
+        haptics.press();
+      } else {
+        haptics.tap();
+      }
     }
+
     onPress();
   };
 

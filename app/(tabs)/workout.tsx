@@ -258,6 +258,7 @@ export default function WorkoutScreen() {
           workoutCount={dashboardData.thisWeek.workoutCount}
           streak={dashboardData.thisWeek.streak}
           hasHistory={dashboardData.hasHistory}
+          workoutDays={dashboardData.thisWeek.workoutDays}
         />
 
         {dashboardData.suggestedWorkout && (

@@ -24,7 +24,14 @@ SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({
+    // DM Sans font family - for display and body text
+    'DMSans-Regular': require('../assets/fonts/DMSans-Regular.ttf'),
+    'DMSans-Medium': require('../assets/fonts/DMSans-Medium.ttf'),
+    'DMSans-SemiBold': require('../assets/fonts/DMSans-SemiBold.ttf'),
+    'DMSans-Bold': require('../assets/fonts/DMSans-Bold.ttf'),
+    // SpaceMono - for monospace numbers
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
+    // FontAwesome - for icons
     ...FontAwesome.font,
   });
 
