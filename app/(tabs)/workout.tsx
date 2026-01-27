@@ -3,6 +3,7 @@ import { StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert } from 'rea
 import { Text, View, useColors } from '@/components/Themed';
 import { useWorkoutSplits, useWorkoutMutations, TemplateWithDetails, SplitWithTemplates } from '@/hooks/useWorkoutTemplates';
 import { useWorkoutDashboard } from '@/hooks/useWorkoutDashboard';
+import { useActiveWorkoutContext } from '@/contexts/ActiveWorkoutContext';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Card, Badge, Button, SwipeableRow } from '@/components/ui';
@@ -134,12 +135,22 @@ function SplitContainer({
   );
 }
 
+function formatElapsedTime(startedAt: Date): string {
+  const diffMs = Date.now() - startedAt.getTime();
+  const diffMins = Math.floor(diffMs / (1000 * 60));
+  if (diffMins < 60) return `${diffMins}m ago`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  return `${Math.floor(diffHours / 24)}d ago`;
+}
+
 export default function WorkoutScreen() {
   const router = useRouter();
   const colors = useColors();
   const { splits, standaloneTemplates, loading, error, refetch } = useWorkoutSplits();
   const { data: dashboardData, refetch: refetchDashboard } = useWorkoutDashboard();
   const { deleteWorkoutSplit, deleteWorkoutTemplate } = useWorkoutMutations();
+  const { hasActiveWorkout, activeWorkout, elapsedSeconds } = useActiveWorkoutContext();
 
   useFocusEffect(
     useCallback(() => {
@@ -210,6 +221,30 @@ export default function WorkoutScreen() {
           Select a workout to begin
         </Text>
       </View>
+
+      {/* Resume Workout Banner */}
+      {hasActiveWorkout && activeWorkout && (
+        <Pressable
+          style={[styles.resumeBanner, { backgroundColor: colors.warning + '15', borderColor: colors.warning + '40' }]}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            router.push(`/workout/${activeWorkout.templateId || 'empty'}`);
+          }}
+        >
+          <View style={[styles.resumeIconContainer, { backgroundColor: colors.warning + '20' }]}>
+            <Ionicons name="play-circle" size={28} color={colors.warning} />
+          </View>
+          <View style={styles.resumeTextContainer}>
+            <Text style={[styles.resumeTitle, { color: colors.text }]}>
+              Resume Workout
+            </Text>
+            <Text style={[styles.resumeSubtitle, { color: colors.textSecondary }]}>
+              {activeWorkout.templateName} - {formatElapsedTime(activeWorkout.startedAt)}
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
+        </Pressable>
+      )}
 
       {/* Quick Actions */}
       <View style={styles.section}>
@@ -342,6 +377,33 @@ const styles = StyleSheet.create({
   subtitle: {
     ...Typography.subhead,
     marginTop: Spacing.xs,
+  },
+  resumeBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: Spacing.xl,
+    marginBottom: Spacing.lg,
+    padding: Spacing.md,
+    borderRadius: Radius.large,
+    borderWidth: 1,
+  },
+  resumeIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: Radius.medium,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  resumeTextContainer: {
+    flex: 1,
+    marginLeft: Spacing.md,
+  },
+  resumeTitle: {
+    ...Typography.headline,
+  },
+  resumeSubtitle: {
+    ...Typography.footnote,
+    marginTop: 2,
   },
   section: {
     paddingHorizontal: Spacing.xl,

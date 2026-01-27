@@ -1,18 +1,18 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { StyleSheet, ScrollView, Pressable, TextInput, Modal, KeyboardAvoidingView, Platform, View as RNView } from 'react-native';
+import { useState, useEffect, useRef } from 'react';
+import { StyleSheet, ScrollView, Pressable, TextInput, Modal, KeyboardAvoidingView, Platform, View as RNView, Alert } from 'react-native';
 import { Text, View, useColors } from '@/components/Themed';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTemplateExercises, useAllExercises } from '@/hooks/useWorkoutTemplates';
 import { useSettings, convertWeight, convertToKg, WeightUnit } from '@/hooks/useSettings';
-import { useAppState } from '@/hooks/useAppState';
+import { useActiveWorkoutContext, WorkoutExercise, SetData } from '@/contexts/ActiveWorkoutContext';
 import { Ionicons } from '@expo/vector-icons';
 import { db } from '@/db';
-import { workoutSessions, setLogs, workoutTemplates } from '@/db/schema';
+import { workoutTemplates } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { Audio } from 'expo-av';
-import { Card, Button, Badge, Input, SegmentedControl, SwipeableRow } from '@/components/ui';
+import { Card, Button, SegmentedControl, SwipeableRow } from '@/components/ui';
 import { Typography } from '@/constants/Typography';
 import { Spacing, Radius } from '@/constants/Spacing';
 
@@ -38,27 +38,6 @@ const MUSCLE_LABELS: Record<string, string> = {
   core: 'Core',
 };
 
-type ExerciseSettings = {
-  restSecondsOverride: number | null;
-  weightUnitOverride: WeightUnit | null;
-};
-
-type WorkoutExercise = {
-  id: string;
-  exerciseId: string;
-  name: string;
-  equipment: string;
-  sets: SetData[];
-  settings: ExerciseSettings;
-};
-
-type SetData = {
-  setNumber: number;
-  reps: number | null;
-  weight: number | null;
-  completed: boolean;
-};
-
 function formatTime(seconds: number): string {
   const mins = Math.floor(seconds / 60);
   const secs = seconds % 60;
@@ -73,111 +52,41 @@ export default function ActiveWorkoutScreen() {
   const { exercises: allExercises } = useAllExercises();
   const { settings } = useSettings();
 
-  const [workoutExercises, setWorkoutExercises] = useState<WorkoutExercise[]>([]);
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  // Use context for persistent workout state
+  const {
+    activeWorkout,
+    hasActiveWorkout,
+    isLoading: contextLoading,
+    elapsedSeconds,
+    restSeconds,
+    startWorkout,
+    completeSet: contextCompleteSet,
+    addSet: contextAddSet,
+    removeSet: contextRemoveSet,
+    addExercise: contextAddExercise,
+    removeExercise: contextRemoveExercise,
+    updateExerciseSettings: contextUpdateExerciseSettings,
+    completeWorkout: contextCompleteWorkout,
+    abandonWorkout,
+    startRestTimer,
+    dismissRestTimer,
+  } = useActiveWorkoutContext();
+
+  // Local UI state only
   const [isComplete, setIsComplete] = useState(false);
-  const [restSeconds, setRestSeconds] = useState<number | null>(null);
   const [showRestOverlay, setShowRestOverlay] = useState(false);
   const [showExercisePicker, setShowExercisePicker] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [initialized, setInitialized] = useState(false);
   const [activeExerciseMenu, setActiveExerciseMenu] = useState<string | null>(null);
+  const [initialized, setInitialized] = useState(false);
 
-  const startTimeRef = useRef<Date>(new Date());
   const templateNameRef = useRef<string>('Workout');
   const soundRef = useRef<Audio.Sound | null>(null);
-  const restEndTimeRef = useRef<number | null>(null);
-
-  // Handle app returning from background - recalculate timers immediately
-  const handleForeground = useCallback(() => {
-    if (!isComplete) {
-      // Recalculate elapsed time immediately
-      setElapsedSeconds(Math.floor((Date.now() - startTimeRef.current.getTime()) / 1000));
-    }
-
-    // Recalculate rest timer if active
-    if (restEndTimeRef.current !== null) {
-      const remainingMs = restEndTimeRef.current - Date.now();
-      if (remainingMs <= 0) {
-        // Rest timer completed while in background - trigger completion
-        setRestSeconds(0);
-      } else {
-        setRestSeconds(Math.ceil(remainingMs / 1000));
-      }
-    }
-  }, [isComplete]);
-
-  // Subscribe to app state changes
-  useAppState(handleForeground);
 
   const weightUnit = settings.weightUnit as WeightUnit;
   const defaultRestSeconds = settings.defaultRestSeconds;
 
-  // Initialize workout exercises from template
-  useEffect(() => {
-    if (!exercisesLoading && templateExercises.length > 0 && !initialized) {
-      const initialExercises: WorkoutExercise[] = templateExercises.map(ex => ({
-        id: `${ex.exerciseId}-${Date.now()}-${Math.random()}`,
-        exerciseId: ex.exerciseId,
-        name: ex.name,
-        equipment: ex.equipment,
-        sets: [{ setNumber: 1, reps: null, weight: null, completed: false }],
-        settings: { restSecondsOverride: null, weightUnitOverride: null },
-      }));
-      setWorkoutExercises(initialExercises);
-      setInitialized(true);
-    }
-  }, [templateExercises, exercisesLoading, initialized]);
-
-  // Timer effect
-  useEffect(() => {
-    if (isComplete) return;
-    const interval = setInterval(() => {
-      setElapsedSeconds(Math.floor((Date.now() - startTimeRef.current.getTime()) / 1000));
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [isComplete]);
-
-  // Rest timer effect - uses wall-clock calculation for accuracy after background
-  useEffect(() => {
-    if (restSeconds === null || restSeconds <= 0 || restEndTimeRef.current === null) return;
-    const interval = setInterval(() => {
-      const remainingMs = restEndTimeRef.current! - Date.now();
-      if (remainingMs <= 0) {
-        setRestSeconds(0);
-      } else {
-        setRestSeconds(Math.ceil(remainingMs / 1000));
-      }
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [restSeconds]);
-
-  // Load sound effect
-  useEffect(() => {
-    const loadSound = async () => {
-      const { sound } = await Audio.Sound.createAsync(
-        require('@/assets/sounds/timer-complete.mp3')
-      );
-      soundRef.current = sound;
-    };
-    loadSound();
-    return () => {
-      soundRef.current?.unloadAsync();
-    };
-  }, []);
-
-  // Timer completion effect
-  useEffect(() => {
-    if (restSeconds === 0) {
-      soundRef.current?.replayAsync();
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      restEndTimeRef.current = null;
-      setRestSeconds(null);
-      setShowRestOverlay(false);
-    }
-  }, [restSeconds]);
-
-  // Fetch template name for history display
+  // Fetch template name
   useEffect(() => {
     if (!id) return;
 
@@ -196,103 +105,153 @@ export default function ActiveWorkoutScreen() {
     fetchTemplateName();
   }, [id]);
 
-  const addExercise = (exercise: { id: string; name: string; equipment: string }) => {
+  // Initialize workout if not already active
+  useEffect(() => {
+    if (contextLoading || exercisesLoading || initialized) return;
+
+    // If there's already an active workout for this template, don't re-initialize
+    if (hasActiveWorkout && activeWorkout?.templateId === id) {
+      setInitialized(true);
+      return;
+    }
+
+    // If there's an active workout for a different template, just show it
+    if (hasActiveWorkout) {
+      setInitialized(true);
+      return;
+    }
+
+    // Start a new workout
+    if (templateExercises.length > 0) {
+      const initialExercises: WorkoutExercise[] = templateExercises.map(ex => ({
+        id: `${ex.exerciseId}-${Date.now()}-${Math.random()}`,
+        exerciseId: ex.exerciseId,
+        name: ex.name,
+        equipment: ex.equipment,
+        sets: [{
+          id: `pending-${Date.now()}`,
+          setNumber: 1,
+          reps: null,
+          weight: null,
+          completed: false,
+          dbSynced: false,
+        }],
+        settings: { restSecondsOverride: null, weightUnitOverride: null },
+      }));
+
+      startWorkout(id || null, templateNameRef.current, initialExercises);
+      setInitialized(true);
+    }
+  }, [contextLoading, exercisesLoading, initialized, hasActiveWorkout, activeWorkout, templateExercises, id, startWorkout]);
+
+  // Load sound effect
+  useEffect(() => {
+    const loadSound = async () => {
+      const { sound } = await Audio.Sound.createAsync(
+        require('@/assets/sounds/timer-complete.mp3')
+      );
+      soundRef.current = sound;
+    };
+    loadSound();
+    return () => {
+      soundRef.current?.unloadAsync();
+    };
+  }, []);
+
+  // Timer completion effect - play sound when rest timer hits 0
+  useEffect(() => {
+    if (restSeconds === 0) {
+      soundRef.current?.replayAsync();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setShowRestOverlay(false);
+    }
+  }, [restSeconds]);
+
+  // Show rest overlay when rest timer starts
+  useEffect(() => {
+    if (restSeconds !== null && restSeconds > 0) {
+      setShowRestOverlay(true);
+    }
+  }, [restSeconds]);
+
+  const handleCancel = () => {
+    Alert.alert(
+      'Cancel Workout?',
+      'Your progress has been saved. You can resume later from the workout tab.',
+      [
+        { text: 'Keep Going', style: 'cancel' },
+        {
+          text: 'Save & Exit',
+          onPress: () => router.back(),
+        },
+        {
+          text: 'Discard',
+          style: 'destructive',
+          onPress: async () => {
+            await abandonWorkout();
+            router.back();
+          },
+        },
+      ]
+    );
+  };
+
+  const handleAddExercise = (exercise: { id: string; name: string; equipment: string }) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const newExercise: WorkoutExercise = {
-      id: `${exercise.id}-${Date.now()}`,
+    contextAddExercise({
       exerciseId: exercise.id,
       name: exercise.name,
       equipment: exercise.equipment,
-      sets: [{ setNumber: 1, reps: null, weight: null, completed: false }],
-      settings: { restSecondsOverride: null, weightUnitOverride: null },
-    };
-    setWorkoutExercises(prev => [...prev, newExercise]);
+    });
     setShowExercisePicker(false);
     setSearchQuery('');
   };
 
-  const removeExercise = (exerciseId: string) => {
+  const handleRemoveExercise = (exerciseId: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setWorkoutExercises(prev => prev.filter(e => e.id !== exerciseId));
+    contextRemoveExercise(exerciseId);
   };
 
-  const addSet = (exerciseId: string) => {
+  const handleAddSet = (exerciseId: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setWorkoutExercises(prev => prev.map(ex => {
-      if (ex.id !== exerciseId) return ex;
-      const nextSetNumber = ex.sets.length + 1;
-      return {
-        ...ex,
-        sets: [...ex.sets, { setNumber: nextSetNumber, reps: null, weight: null, completed: false }],
-      };
-    }));
+    contextAddSet(exerciseId);
   };
 
-  const removeSet = (exerciseId: string, setNumber: number) => {
+  const handleRemoveSet = (exerciseId: string, setNumber: number) => {
     Haptics.selectionAsync();
-    setWorkoutExercises(prev => prev.map(ex => {
-      if (ex.id !== exerciseId) return ex;
-      if (ex.sets.length <= 1) return ex;
-      const newSets = ex.sets
-        .filter(s => s.setNumber !== setNumber)
-        .map((s, idx) => ({ ...s, setNumber: idx + 1 }));
-      return { ...ex, sets: newSets };
-    }));
+    contextRemoveSet(exerciseId, setNumber);
   };
 
-  const completeSet = (exerciseId: string, setNumber: number, reps: number, weight: number, effectiveWeightUnit: WeightUnit) => {
+  const handleCompleteSet = async (
+    exerciseId: string,
+    setNumber: number,
+    reps: number,
+    weight: number,
+    effectiveWeightUnit: WeightUnit
+  ) => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    const exercise = workoutExercises.find(e => e.id === exerciseId);
+    const exercise = activeWorkout?.exercises.find(e => e.id === exerciseId);
     const effectiveRestSeconds = exercise?.settings.restSecondsOverride ?? defaultRestSeconds;
 
-    setWorkoutExercises(prev => prev.map(ex => {
-      if (ex.id !== exerciseId) return ex;
-      return {
-        ...ex,
-        sets: ex.sets.map(s =>
-          s.setNumber === setNumber
-            ? { ...s, reps, weight: convertToKg(weight, effectiveWeightUnit), completed: true }
-            : s
-        ),
-      };
-    }));
-    // Set wall-clock end time for accurate timer after background
-    restEndTimeRef.current = Date.now() + effectiveRestSeconds * 1000;
-    setRestSeconds(effectiveRestSeconds);
-    setShowRestOverlay(true);
+    // Convert to kg for storage
+    const weightInKg = convertToKg(weight, effectiveWeightUnit);
+    await contextCompleteSet(exerciseId, setNumber, reps, weightInKg);
+
+    // Start rest timer
+    startRestTimer(effectiveRestSeconds);
   };
 
-  const completeWorkout = async () => {
+  const handleCompleteWorkout = async () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    const sessionId = 'session-' + Date.now();
-    const now = new Date();
-
-    await db.insert(workoutSessions).values({
-      id: sessionId,
-      templateId: id || null,
-      templateName: templateNameRef.current,
-      startedAt: startTimeRef.current,
-      completedAt: now,
-      durationSeconds: elapsedSeconds,
-    });
-
-    for (const exercise of workoutExercises) {
-      for (const set of exercise.sets) {
-        if (set.completed && set.reps !== null && set.weight !== null) {
-          await db.insert(setLogs).values({
-            id: `${sessionId}-${exercise.exerciseId}-${set.setNumber}`,
-            sessionId,
-            exerciseId: exercise.exerciseId,
-            setNumber: set.setNumber,
-            reps: set.reps,
-            weight: set.weight,
-            restSeconds: defaultRestSeconds,
-          });
-        }
-      }
-    }
-
+    await contextCompleteWorkout();
     setIsComplete(true);
+  };
+
+  const handleUpdateExerciseSettings = (
+    exerciseId: string,
+    settings: { restSecondsOverride?: number | null; weightUnitOverride?: WeightUnit | null }
+  ) => {
+    contextUpdateExerciseSettings(exerciseId, settings);
   };
 
   const filteredExercises = allExercises.filter(ex =>
@@ -307,17 +266,10 @@ export default function ActiveWorkoutScreen() {
     return acc;
   }, {} as Record<string, typeof filteredExercises>);
 
-  const getActiveExercise = () => workoutExercises.find(e => e.id === activeExerciseMenu);
+  const getActiveExercise = () => activeWorkout?.exercises.find(e => e.id === activeExerciseMenu);
 
-  const updateExerciseSettings = (exerciseId: string, updates: Partial<ExerciseSettings>) => {
-    setWorkoutExercises(prev => prev.map(ex =>
-      ex.id === exerciseId
-        ? { ...ex, settings: { ...ex.settings, ...updates } }
-        : ex
-    ));
-  };
-
-  if (exercisesLoading) {
+  // Loading state
+  if (exercisesLoading || contextLoading || !initialized) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
         <Text style={{ color: colors.textSecondary }}>Loading...</Text>
@@ -325,7 +277,13 @@ export default function ActiveWorkoutScreen() {
     );
   }
 
+  // Complete state
   if (isComplete) {
+    const completedSets = activeWorkout?.exercises.reduce(
+      (acc, ex) => acc + ex.sets.filter(s => s.completed).length,
+      0
+    ) ?? 0;
+
     return (
       <View style={[styles.completeContainer, { backgroundColor: colors.background }]}>
         <View style={[styles.completeIconContainer, { backgroundColor: colors.success + '20' }]}>
@@ -336,7 +294,7 @@ export default function ActiveWorkoutScreen() {
           Duration: {formatTime(elapsedSeconds)}
         </Text>
         <Text style={[styles.completeStats, { color: colors.textTertiary }]}>
-          {workoutExercises.length} exercises · {workoutExercises.reduce((acc, ex) => acc + ex.sets.filter(s => s.completed).length, 0)} sets
+          {activeWorkout?.exercises.length ?? 0} exercises · {completedSets} sets
         </Text>
         <Button
           title="Done"
@@ -349,17 +307,27 @@ export default function ActiveWorkoutScreen() {
     );
   }
 
+  // No active workout (shouldn't happen but handle gracefully)
+  if (!activeWorkout) {
+    return (
+      <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
+        <Text style={{ color: colors.textSecondary }}>No active workout</Text>
+        <Button title="Go Back" onPress={() => router.back()} variant="secondary" style={{ marginTop: Spacing.lg }} />
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { borderBottomColor: colors.separator }]}>
-        <Pressable onPress={() => router.back()}>
+        <Pressable onPress={handleCancel}>
           <Text style={[styles.cancelText, { color: colors.error }]}>Cancel</Text>
         </Pressable>
         <View style={[styles.timerContainer, { backgroundColor: colors.backgroundSecondary }]}>
           <Ionicons name="time-outline" size={16} color={colors.textSecondary} />
           <Text style={[styles.timer, { color: colors.text }]}>{formatTime(elapsedSeconds)}</Text>
         </View>
-        <Pressable onPress={completeWorkout}>
+        <Pressable onPress={handleCompleteWorkout}>
           <Text style={[styles.finishText, { color: colors.success }]}>Finish</Text>
         </Pressable>
       </View>
@@ -392,16 +360,18 @@ export default function ActiveWorkoutScreen() {
         keyboardVerticalOffset={100}
       >
         <ScrollView style={styles.scrollView} keyboardShouldPersistTaps="handled">
-          {workoutExercises.map(exercise => (
+          {activeWorkout.exercises.map(exercise => (
             <ExerciseCard
               key={exercise.id}
               exercise={exercise}
               weightUnit={weightUnit}
               colors={colors}
-              onRemoveExercise={() => removeExercise(exercise.id)}
-              onAddSet={() => addSet(exercise.id)}
-              onRemoveSet={(setNumber) => removeSet(exercise.id, setNumber)}
-              onCompleteSet={(setNumber, reps, weight, effectiveWeightUnit) => completeSet(exercise.id, setNumber, reps, weight, effectiveWeightUnit)}
+              onRemoveExercise={() => handleRemoveExercise(exercise.id)}
+              onAddSet={() => handleAddSet(exercise.id)}
+              onRemoveSet={(setNumber) => handleRemoveSet(exercise.id, setNumber)}
+              onCompleteSet={(setNumber, reps, weight, effectiveWeightUnit) =>
+                handleCompleteSet(exercise.id, setNumber, reps, weight, effectiveWeightUnit)
+              }
               onOpenMenu={() => setActiveExerciseMenu(exercise.id)}
             />
           ))}
@@ -457,7 +427,7 @@ export default function ActiveWorkoutScreen() {
                     <Pressable
                       key={ex.id}
                       style={[styles.exerciseItem, { borderBottomColor: colors.separator }]}
-                      onPress={() => addExercise(ex)}
+                      onPress={() => handleAddExercise(ex)}
                     >
                       <Text style={[styles.exerciseItemName, { color: colors.text }]}>{ex.name}</Text>
                       <Text style={[styles.exerciseItemEquipment, { color: colors.textTertiary }]}>
@@ -505,7 +475,7 @@ export default function ActiveWorkoutScreen() {
                 selectedValue={String(getActiveExercise()?.settings.restSecondsOverride ?? defaultRestSeconds)}
                 onValueChange={(value) => {
                   if (activeExerciseMenu) {
-                    updateExerciseSettings(activeExerciseMenu, {
+                    handleUpdateExerciseSettings(activeExerciseMenu, {
                       restSecondsOverride: parseInt(value, 10)
                     });
                   }
@@ -524,7 +494,7 @@ export default function ActiveWorkoutScreen() {
                 selectedValue={getActiveExercise()?.settings.weightUnitOverride ?? weightUnit}
                 onValueChange={(value) => {
                   if (activeExerciseMenu) {
-                    updateExerciseSettings(activeExerciseMenu, {
+                    handleUpdateExerciseSettings(activeExerciseMenu, {
                       weightUnitOverride: value as WeightUnit
                     });
                   }
@@ -581,30 +551,30 @@ function ExerciseCard({
           </Pressable>
         </View>
 
-      <View style={styles.setsContainer}>
-        <View style={styles.setHeaderRow}>
-          <Text style={[styles.setHeaderText, { color: colors.textTertiary }]}>Set</Text>
-          <Text style={[styles.setHeaderText, { color: colors.textTertiary }]}>{effectiveWeightUnit}</Text>
-          <Text style={[styles.setHeaderText, { color: colors.textTertiary }]}>Reps</Text>
-          <Text style={[styles.setHeaderText, { color: colors.textTertiary }]}></Text>
+        <View style={styles.setsContainer}>
+          <View style={styles.setHeaderRow}>
+            <Text style={[styles.setHeaderText, { color: colors.textTertiary }]}>Set</Text>
+            <Text style={[styles.setHeaderText, { color: colors.textTertiary }]}>{effectiveWeightUnit}</Text>
+            <Text style={[styles.setHeaderText, { color: colors.textTertiary }]}>Reps</Text>
+            <Text style={[styles.setHeaderText, { color: colors.textTertiary }]}></Text>
+          </View>
+
+          {exercise.sets.map(set => (
+            <SetRow
+              key={set.setNumber}
+              set={set}
+              weightUnit={effectiveWeightUnit}
+              colors={colors}
+              onComplete={(reps, weight) => onCompleteSet(set.setNumber, reps, weight, effectiveWeightUnit)}
+              onRemove={() => onRemoveSet(set.setNumber)}
+              canRemove={exercise.sets.length > 1}
+            />
+          ))}
+
+          <Pressable style={styles.addSetButton} onPress={onAddSet}>
+            <Text style={[styles.addSetText, { color: colors.primary }]}>+ Add Set</Text>
+          </Pressable>
         </View>
-
-        {exercise.sets.map(set => (
-          <SetRow
-            key={set.setNumber}
-            set={set}
-            weightUnit={effectiveWeightUnit}
-            colors={colors}
-            onComplete={(reps, weight) => onCompleteSet(set.setNumber, reps, weight, effectiveWeightUnit)}
-            onRemove={() => onRemoveSet(set.setNumber)}
-            canRemove={exercise.sets.length > 1}
-          />
-        ))}
-
-        <Pressable style={styles.addSetButton} onPress={onAddSet}>
-          <Text style={[styles.addSetText, { color: colors.primary }]}>+ Add Set</Text>
-        </Pressable>
-      </View>
       </Card>
     </SwipeableRow>
   );
@@ -723,7 +693,6 @@ const styles = StyleSheet.create({
   exerciseInfo: { flex: 1, backgroundColor: 'transparent' },
   exerciseName: { ...Typography.headline },
   exerciseEquipment: { ...Typography.footnote, marginTop: 2 },
-  removeButton: { padding: Spacing.sm },
   setsContainer: { marginTop: Spacing.md },
   setHeaderRow: {
     flexDirection: 'row',

@@ -10,6 +10,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useColorScheme } from '@/components/useColorScheme';
 import { DatabaseProvider, useDatabase } from '@/contexts/DatabaseContext';
 import { ThemeProvider } from '@/contexts/ThemeContext';
+import { ActiveWorkoutProvider } from '@/contexts/ActiveWorkoutContext';
 import { View, Text } from '@/components/Themed';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 
@@ -78,12 +79,14 @@ function DatabaseReadyGate() {
     );
   }
 
-  // Database is ready, now we can use ThemeProvider which accesses the database
+  // Database is ready, now we can use ThemeProvider and ActiveWorkoutProvider
   return (
     <ThemeProvider>
-      <ErrorBoundary>
-        <RootLayoutNav />
-      </ErrorBoundary>
+      <ActiveWorkoutProvider>
+        <ErrorBoundary>
+          <RootLayoutNav />
+        </ErrorBoundary>
+      </ActiveWorkoutProvider>
     </ThemeProvider>
   );
 }
