@@ -1,13 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
-import { StyleSheet, ScrollView, Pressable, TextInput, Modal, FlatList, KeyboardAvoidingView, Platform, View as RNView } from 'react-native';
+import { StyleSheet, ScrollView, Pressable, TextInput, Modal, KeyboardAvoidingView, Platform, View as RNView, Alert } from 'react-native';
 import { Text, View, useColors } from '@/components/Themed';
 import { useRouter } from 'expo-router';
 import { useColorScheme } from '@/components/useColorScheme';
 import { useSettings, convertWeight, convertToKg, WeightUnit } from '@/hooks/useSettings';
 import { useAllExercises } from '@/hooks/useWorkoutTemplates';
+import { useActiveWorkoutContext, WorkoutExercise, SetData } from '@/contexts/ActiveWorkoutContext';
 import { Ionicons } from '@expo/vector-icons';
-import { db } from '@/db';
-import { workoutSessions, setLogs } from '@/db/schema';
 import { Audio } from 'expo-av';
 import * as Haptics from 'expo-haptics';
 
@@ -33,21 +32,6 @@ const MUSCLE_LABELS: Record<string, string> = {
   core: 'Core',
 };
 
-type WorkoutExercise = {
-  id: string;
-  exerciseId: string;
-  name: string;
-  equipment: string;
-  sets: SetData[];
-};
-
-type SetData = {
-  setNumber: number;
-  reps: number | null;
-  weight: number | null;
-  completed: boolean;
-};
-
 function formatTime(seconds: number): string {
   const mins = Math.floor(seconds / 60);
   const secs = seconds % 60;
@@ -62,43 +46,70 @@ export default function EmptyWorkoutScreen() {
   const { settings } = useSettings();
   const { exercises: allExercises } = useAllExercises();
 
-  const [workoutExercises, setWorkoutExercises] = useState<WorkoutExercise[]>([]);
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  // Use context for persistent workout state
+  const {
+    activeWorkout,
+    hasActiveWorkout,
+    isLoading: contextLoading,
+    elapsedSeconds,
+    restSeconds,
+    startWorkout,
+    completeSet: contextCompleteSet,
+    addSet: contextAddSet,
+    removeSet: contextRemoveSet,
+    addExercise: contextAddExercise,
+    removeExercise: contextRemoveExercise,
+    completeWorkout: contextCompleteWorkout,
+    abandonWorkout,
+    startRestTimer,
+    dismissRestTimer,
+  } = useActiveWorkoutContext();
+
+  // Local UI state only
+  const [isComplete, setIsComplete] = useState(false);
+  const [showRestOverlay, setShowRestOverlay] = useState(false);
   const [showExercisePicker, setShowExercisePicker] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [isComplete, setIsComplete] = useState(false);
-  const [restSeconds, setRestSeconds] = useState<number | null>(null);
-  const [showRestOverlay, setShowRestOverlay] = useState(false);
+  const [initialized, setInitialized] = useState(false);
 
-  const sessionIdRef = useRef<string | null>(null);
-  const startTimeRef = useRef<Date>(new Date());
   const soundRef = useRef<Audio.Sound | null>(null);
+  const weightUnit = settings.weightUnit as WeightUnit;
+  const defaultRestSeconds = settings.defaultRestSeconds;
 
-  // Timer effect
+  // Initialize empty workout if not already active
   useEffect(() => {
-    if (isComplete) return;
-    const interval = setInterval(() => {
-      setElapsedSeconds(Math.floor((Date.now() - startTimeRef.current.getTime()) / 1000));
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [isComplete]);
+    if (contextLoading || initialized) return;
 
-  // Rest timer effect
-  useEffect(() => {
-    if (restSeconds === null || restSeconds <= 0) return;
-    const interval = setInterval(() => {
-      setRestSeconds(prev => (prev !== null && prev > 0 ? prev - 1 : null));
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [restSeconds]);
+    // If there's already an active workout (any), don't re-initialize
+    if (hasActiveWorkout) {
+      setInitialized(true);
+      return;
+    }
+
+    // Start a new empty workout with no exercises
+    const initWorkout = async () => {
+      try {
+        await startWorkout(null, 'Empty Workout', []);
+        setInitialized(true);
+      } catch (error) {
+        Alert.alert('Error', 'Failed to start workout session.');
+        router.back();
+      }
+    };
+    initWorkout();
+  }, [contextLoading, initialized, hasActiveWorkout, startWorkout, router]);
 
   // Load sound effect
   useEffect(() => {
     const loadSound = async () => {
-      const { sound } = await Audio.Sound.createAsync(
-        require('@/assets/sounds/timer-complete.mp3')
-      );
-      soundRef.current = sound;
+      try {
+        const { sound } = await Audio.Sound.createAsync(
+          require('@/assets/sounds/timer-complete.mp3')
+        );
+        soundRef.current = sound;
+      } catch (error) {
+        console.warn('Failed to load timer sound:', error);
+      }
     };
     loadSound();
     return () => {
@@ -111,96 +122,79 @@ export default function EmptyWorkoutScreen() {
     if (restSeconds === 0) {
       soundRef.current?.replayAsync();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setRestSeconds(null);
+      dismissRestTimer();
       setShowRestOverlay(false);
     }
-  }, [restSeconds]);
+  }, [restSeconds, dismissRestTimer]);
 
-  const addExercise = (exercise: { id: string; name: string; equipment: string }) => {
-    const newExercise: WorkoutExercise = {
-      id: `${exercise.id}-${Date.now()}`,
+  const handleAddExercise = (exercise: { id: string; name: string; equipment: string }) => {
+    contextAddExercise({
       exerciseId: exercise.id,
       name: exercise.name,
       equipment: exercise.equipment,
-      sets: [{ setNumber: 1, reps: null, weight: null, completed: false }],
-    };
-    setWorkoutExercises(prev => [...prev, newExercise]);
+    });
     setShowExercisePicker(false);
     setSearchQuery('');
   };
 
-  const removeExercise = (exerciseId: string) => {
-    setWorkoutExercises(prev => prev.filter(e => e.id !== exerciseId));
+  const handleRemoveExercise = (exerciseInstanceId: string) => {
+    contextRemoveExercise(exerciseInstanceId);
   };
 
-  const addSet = (exerciseId: string) => {
-    setWorkoutExercises(prev => prev.map(ex => {
-      if (ex.id !== exerciseId) return ex;
-      const nextSetNumber = ex.sets.length + 1;
-      return {
-        ...ex,
-        sets: [...ex.sets, { setNumber: nextSetNumber, reps: null, weight: null, completed: false }],
-      };
-    }));
+  const handleAddSet = (exerciseInstanceId: string) => {
+    contextAddSet(exerciseInstanceId);
   };
 
-  const removeSet = (exerciseId: string, setNumber: number) => {
-    setWorkoutExercises(prev => prev.map(ex => {
-      if (ex.id !== exerciseId) return ex;
-      const newSets = ex.sets
-        .filter(s => s.setNumber !== setNumber)
-        .map((s, idx) => ({ ...s, setNumber: idx + 1 }));
-      return { ...ex, sets: newSets };
-    }));
+  const handleRemoveSet = (exerciseInstanceId: string, setNumber: number) => {
+    contextRemoveSet(exerciseInstanceId, setNumber);
   };
 
-  const completeSet = (exerciseId: string, setNumber: number, reps: number, weight: number) => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setWorkoutExercises(prev => prev.map(ex => {
-      if (ex.id !== exerciseId) return ex;
-      return {
-        ...ex,
-        sets: ex.sets.map(s =>
-          s.setNumber === setNumber
-            ? { ...s, reps, weight: convertToKg(weight, settings.weightUnit as WeightUnit), completed: true }
-            : s
-        ),
-      };
-    }));
-    setRestSeconds(settings.defaultRestSeconds);
-    setShowRestOverlay(true);
-  };
-
-  const completeWorkout = async () => {
-    const sessionId = 'session-' + Date.now();
-    const now = new Date();
-
-    await db.insert(workoutSessions).values({
-      id: sessionId,
-      templateId: null,
-      templateName: 'Empty Workout',
-      startedAt: startTimeRef.current,
-      completedAt: now,
-      durationSeconds: elapsedSeconds,
-    });
-
-    for (const exercise of workoutExercises) {
-      for (const set of exercise.sets) {
-        if (set.completed && set.reps !== null && set.weight !== null) {
-          await db.insert(setLogs).values({
-            id: `${sessionId}-${exercise.exerciseId}-${set.setNumber}`,
-            sessionId,
-            exerciseId: exercise.exerciseId,
-            setNumber: set.setNumber,
-            reps: set.reps,
-            weight: set.weight,
-            restSeconds: settings.defaultRestSeconds,
-          });
-        }
-      }
+  const handleCompleteSet = async (exerciseInstanceId: string, setNumber: number, reps: number, weight: number) => {
+    try {
+      const weightInKg = convertToKg(weight, weightUnit);
+      await contextCompleteSet(exerciseInstanceId, setNumber, reps, weightInKg);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      startRestTimer(defaultRestSeconds);
+      setShowRestOverlay(true);
+    } catch (error) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert('Error', 'Failed to save set. Please try again.');
     }
+  };
 
-    setIsComplete(true);
+  const handleCompleteWorkout = async () => {
+    try {
+      await contextCompleteWorkout();
+      setIsComplete(true);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to complete workout. Please try again.');
+    }
+  };
+
+  const handleCancel = () => {
+    if (hasActiveWorkout && activeWorkout && activeWorkout.exercises.some(ex => ex.sets.some(s => s.completed))) {
+      Alert.alert(
+        'Discard Workout?',
+        'You have completed sets. Are you sure you want to discard this workout?',
+        [
+          { text: 'Keep Going', style: 'cancel' },
+          { text: 'Discard', style: 'destructive', onPress: async () => {
+            try {
+              await abandonWorkout();
+              router.back();
+            } catch (error) {
+              Alert.alert('Error', 'Failed to discard workout. Please try again.');
+            }
+          }},
+        ]
+      );
+    } else if (hasActiveWorkout) {
+      abandonWorkout().then(() => router.back()).catch(() => {
+        Alert.alert('Error', 'Failed to discard workout. Please try again.');
+      });
+    } else {
+      router.back();
+    }
   };
 
   const filteredExercises = allExercises.filter(ex =>
@@ -216,13 +210,25 @@ export default function EmptyWorkoutScreen() {
     return acc;
   }, {} as Record<string, typeof filteredExercises>);
 
+  // Get exercises from context
+  const workoutExercises = activeWorkout?.exercises || [];
+
+  if (contextLoading || !initialized) {
+    return (
+      <View style={styles.container}>
+        <Text>Loading...</Text>
+      </View>
+    );
+  }
+
   if (isComplete) {
+    const totalSets = workoutExercises.reduce((acc, ex) => acc + ex.sets.filter(s => s.completed).length, 0);
     return (
       <View style={styles.completeContainer}>
         <Text style={styles.completeTitle}>Workout Complete!</Text>
         <Text style={styles.completeTime}>Duration: {formatTime(elapsedSeconds)}</Text>
         <Text style={styles.completeStats}>
-          {workoutExercises.length} exercises, {workoutExercises.reduce((acc, ex) => acc + ex.sets.filter(s => s.completed).length, 0)} sets
+          {workoutExercises.length} exercises, {totalSets} sets
         </Text>
         <Pressable style={styles.doneButton} onPress={() => router.back()}>
           <Text style={styles.doneButtonText}>Done</Text>
@@ -234,11 +240,11 @@ export default function EmptyWorkoutScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()}>
+        <Pressable onPress={handleCancel}>
           <Text style={styles.cancelText}>Cancel</Text>
         </Pressable>
         <Text style={styles.timer}>{formatTime(elapsedSeconds)}</Text>
-        <Pressable onPress={completeWorkout}>
+        <Pressable onPress={handleCompleteWorkout}>
           <Text style={styles.finishText}>Finish</Text>
         </Pressable>
       </View>
@@ -273,11 +279,11 @@ export default function EmptyWorkoutScreen() {
             <ExerciseCard
               key={exercise.id}
               exercise={exercise}
-              weightUnit={settings.weightUnit as WeightUnit}
-              onRemoveExercise={() => removeExercise(exercise.id)}
-              onAddSet={() => addSet(exercise.id)}
-              onRemoveSet={(setNumber) => removeSet(exercise.id, setNumber)}
-              onCompleteSet={(setNumber, reps, weight) => completeSet(exercise.id, setNumber, reps, weight)}
+              weightUnit={weightUnit}
+              onRemoveExercise={() => handleRemoveExercise(exercise.id)}
+              onAddSet={() => handleAddSet(exercise.id)}
+              onRemoveSet={(setNumber) => handleRemoveSet(exercise.id, setNumber)}
+              onCompleteSet={(setNumber, reps, weight) => handleCompleteSet(exercise.id, setNumber, reps, weight)}
             />
           ))}
 
@@ -321,7 +327,7 @@ export default function EmptyWorkoutScreen() {
                     <Pressable
                       key={ex.id}
                       style={styles.exerciseItem}
-                      onPress={() => addExercise(ex)}
+                      onPress={() => handleAddExercise(ex)}
                     >
                       <Text style={styles.exerciseItemName}>{ex.name}</Text>
                       <Text style={styles.exerciseItemEquipment}>{EQUIPMENT_LABELS[ex.equipment]}</Text>
@@ -413,7 +419,8 @@ function SetRow({
   const handleComplete = () => {
     const repsNum = parseInt(reps, 10);
     const weightNum = parseFloat(weight);
-    if (!isNaN(repsNum) && !isNaN(weightNum)) {
+    // Validate: reps must be positive, weight must be non-negative
+    if (!isNaN(repsNum) && !isNaN(weightNum) && repsNum > 0 && weightNum >= 0) {
       onComplete(repsNum, weightNum);
     }
   };
