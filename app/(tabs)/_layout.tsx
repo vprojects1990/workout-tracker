@@ -4,6 +4,7 @@ import { Tabs } from 'expo-router';
 
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 function TabBarIcon(props: {
   name: React.ComponentProps<typeof FontAwesome>['name'];
@@ -16,33 +17,35 @@ export default function TabLayout() {
   const colorScheme = useColorScheme();
 
   return (
-    <Tabs
-      screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
-        headerShown: false,
-      }}
-      initialRouteName="workout">
-      <Tabs.Screen
-        name="workout"
-        options={{
-          title: 'Workout',
-          tabBarIcon: ({ color }) => <TabBarIcon name="heartbeat" color={color} />,
+    <ErrorBoundary>
+      <Tabs
+        screenOptions={{
+          tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
+          headerShown: false,
         }}
-      />
-      <Tabs.Screen
-        name="history"
-        options={{
-          title: 'History',
-          tabBarIcon: ({ color }) => <TabBarIcon name="calendar" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="insights"
-        options={{
-          title: 'Insights',
-          tabBarIcon: ({ color }) => <TabBarIcon name="line-chart" color={color} />,
-        }}
-      />
-    </Tabs>
+        initialRouteName="workout">
+        <Tabs.Screen
+          name="workout"
+          options={{
+            title: 'Workout',
+            tabBarIcon: ({ color }) => <TabBarIcon name="heartbeat" color={color} />,
+          }}
+        />
+        <Tabs.Screen
+          name="history"
+          options={{
+            title: 'History',
+            tabBarIcon: ({ color }) => <TabBarIcon name="calendar" color={color} />,
+          }}
+        />
+        <Tabs.Screen
+          name="insights"
+          options={{
+            title: 'Insights',
+            tabBarIcon: ({ color }) => <TabBarIcon name="line-chart" color={color} />,
+          }}
+        />
+      </Tabs>
+    </ErrorBoundary>
   );
 }
