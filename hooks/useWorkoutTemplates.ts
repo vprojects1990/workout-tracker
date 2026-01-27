@@ -49,13 +49,17 @@ async function fetchTemplateDetails(templateIds: string[]): Promise<{
   const lastSessions = await db
     .select({
       templateId: workoutSessions.templateId,
-      completedAt: sql<Date>`MAX(${workoutSessions.completedAt})`,
+      completedAt: sql<number>`MAX(${workoutSessions.completedAt})`,
     })
     .from(workoutSessions)
     .where(inArray(workoutSessions.templateId, templateIds))
     .groupBy(workoutSessions.templateId);
 
-  const lastPerformed = new Map(lastSessions.map(s => [s.templateId!, s.completedAt]));
+  // Convert raw timestamps (seconds) to Date objects (sql aggregates return raw values)
+  const lastPerformed = new Map(lastSessions.map(s => [
+    s.templateId!,
+    s.completedAt ? new Date(s.completedAt * 1000) : null
+  ]));
 
   return { exerciseCounts, lastPerformed };
 }
