@@ -93,6 +93,28 @@ git checkout -b fix/[descriptive-name]
 
 Then implement following the plan from Phase 3.
 
+**Use Pattern Skills during implementation:**
+
+For **frontend work** (React components, UI, state management):
+```
+/frontend-patterns
+```
+This skill provides guidance on:
+- React component patterns and best practices
+- State management approaches
+- Performance optimization
+- UI/UX patterns
+
+For **backend work** (API routes, database, server logic):
+```
+/backend-patterns
+```
+This skill provides guidance on:
+- API design patterns
+- Database query optimization
+- Authentication/authorization patterns
+- Error handling best practices
+
 **Branch naming conventions:**
 - `feature/` - New features
 - `fix/` - Bug fixes
@@ -196,6 +218,13 @@ Use the doc-updater agent to update documentation for the new feature
 | Code Review | `code-reviewer` agent | Review report |
 | Security | `security-reviewer` agent | Security report |
 | Documentation | `doc-updater` agent | Updated docs |
+
+### Pattern Skills (use during implementation)
+
+| Domain | Skill | Use When |
+|--------|-------|----------|
+| Frontend | `/frontend-patterns` | React components, UI, state management |
+| Backend | `/backend-patterns` | API routes, database, server logic |
 
 ---
 
