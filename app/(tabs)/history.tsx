@@ -1,6 +1,7 @@
 import { StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert } from 'react-native';
 import { Text, View, useColors } from '@/components/Themed';
 import { useWorkoutHistory, WorkoutHistoryItem, useWorkoutDetails, useHistoryMutations } from '@/hooks/useWorkoutHistory';
+import { useWorkoutDashboard } from '@/hooks/useWorkoutDashboard';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { useSettings, convertWeight } from '@/hooks/useSettings';
@@ -135,6 +136,7 @@ export default function HistoryScreen() {
   const colors = useColors();
   const { history, loading, error, refetch } = useWorkoutHistory();
   const { deleteWorkoutSession } = useHistoryMutations();
+  const { refetch: refetchDashboard } = useWorkoutDashboard();
   const { settings } = useSettings();
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -152,6 +154,7 @@ export default function HistoryScreen() {
     try {
       await deleteWorkoutSession(sessionId);
       refetch();
+      refetchDashboard();
     } catch (e) {
       Alert.alert('Error', 'Failed to delete workout. Please try again.');
       console.error('Error deleting session:', e);

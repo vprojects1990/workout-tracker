@@ -152,6 +152,7 @@ export default function WorkoutScreen() {
     try {
       await deleteWorkoutSplit(splitId);
       refetch();
+      refetchDashboard();
     } catch (e) {
       Alert.alert('Error', 'Failed to delete split. Please try again.');
       console.error('Error deleting split:', e);
@@ -162,6 +163,7 @@ export default function WorkoutScreen() {
     try {
       await deleteWorkoutTemplate(templateId);
       refetch();
+      refetchDashboard();
     } catch (e) {
       Alert.alert('Error', 'Failed to delete workout. Please try again.');
       console.error('Error deleting template:', e);
