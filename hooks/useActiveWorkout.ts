@@ -3,6 +3,7 @@ import { db } from '@/db';
 import { workoutSessions, setLogs, workoutTemplates } from '@/db/schema';
 import { eq, desc } from 'drizzle-orm';
 import { TemplateExerciseWithDetails } from './useWorkoutTemplates';
+import { useAppState } from './useAppState';
 
 export type SetData = {
   setNumber: number;
@@ -25,17 +26,37 @@ export function useActiveWorkout(templateId: string, exercises: TemplateExercise
   const [isComplete, setIsComplete] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const restTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const startTimeRef = useRef<Date>(new Date());
+  const restEndTimeRef = useRef<number | null>(null);
 
-  // Start workout timer
+  // Handle app returning from background - recalculate timers immediately
+  const handleForeground = useCallback(() => {
+    if (!isComplete) {
+      setElapsedSeconds(Math.floor((Date.now() - startTimeRef.current.getTime()) / 1000));
+    }
+    if (restEndTimeRef.current !== null) {
+      const remainingMs = restEndTimeRef.current - Date.now();
+      if (remainingMs <= 0) {
+        setRestSeconds(0);
+      } else {
+        setRestSeconds(Math.ceil(remainingMs / 1000));
+      }
+    }
+  }, [isComplete]);
+
+  useAppState(handleForeground);
+
+  // Start workout timer - uses wall-clock calculation for accuracy after background
   useEffect(() => {
+    if (isComplete) return;
     timerRef.current = setInterval(() => {
-      setElapsedSeconds(s => s + 1);
+      setElapsedSeconds(Math.floor((Date.now() - startTimeRef.current.getTime()) / 1000));
     }, 1000);
 
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, []);
+  }, [isComplete]);
 
   // Initialize session and progress
   useEffect(() => {
@@ -93,13 +114,18 @@ export function useActiveWorkout(templateId: string, exercises: TemplateExercise
     }
   }, [templateId, exercises]);
 
-  // Rest timer countdown
+  // Rest timer countdown - uses wall-clock calculation for accuracy after background
   useEffect(() => {
-    if (restSeconds !== null && restSeconds > 0) {
-      restTimerRef.current = setTimeout(() => {
-        setRestSeconds(s => (s !== null ? s - 1 : null));
-      }, 1000);
-    }
+    if (restSeconds === null || restSeconds <= 0 || restEndTimeRef.current === null) return;
+    restTimerRef.current = setTimeout(() => {
+      const remainingMs = restEndTimeRef.current! - Date.now();
+      if (remainingMs <= 0) {
+        restEndTimeRef.current = null;
+        setRestSeconds(0);
+      } else {
+        setRestSeconds(Math.ceil(remainingMs / 1000));
+      }
+    }, 1000);
 
     return () => {
       if (restTimerRef.current) clearTimeout(restTimerRef.current);
@@ -143,7 +169,8 @@ export function useActiveWorkout(templateId: string, exercises: TemplateExercise
       return newProgress;
     });
 
-    // Start rest timer
+    // Start rest timer with wall-clock end time
+    restEndTimeRef.current = Date.now() + defaultRestSeconds * 1000;
     setRestSeconds(defaultRestSeconds);
   }, [sessionId]);
 
@@ -164,6 +191,7 @@ export function useActiveWorkout(templateId: string, exercises: TemplateExercise
   }, [sessionId, elapsedSeconds]);
 
   const dismissRestTimer = useCallback(() => {
+    restEndTimeRef.current = null;
     setRestSeconds(null);
     if (restTimerRef.current) clearTimeout(restTimerRef.current);
   }, []);

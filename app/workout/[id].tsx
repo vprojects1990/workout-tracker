@@ -1,9 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { StyleSheet, ScrollView, Pressable, TextInput, Modal, KeyboardAvoidingView, Platform, View as RNView } from 'react-native';
 import { Text, View, useColors } from '@/components/Themed';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTemplateExercises, useAllExercises } from '@/hooks/useWorkoutTemplates';
 import { useSettings, convertWeight, convertToKg, WeightUnit } from '@/hooks/useSettings';
+import { useAppState } from '@/hooks/useAppState';
 import { Ionicons } from '@expo/vector-icons';
 import { db } from '@/db';
 import { workoutSessions, setLogs, workoutTemplates } from '@/db/schema';
@@ -85,6 +86,29 @@ export default function ActiveWorkoutScreen() {
   const startTimeRef = useRef<Date>(new Date());
   const templateNameRef = useRef<string>('Workout');
   const soundRef = useRef<Audio.Sound | null>(null);
+  const restEndTimeRef = useRef<number | null>(null);
+
+  // Handle app returning from background - recalculate timers immediately
+  const handleForeground = useCallback(() => {
+    if (!isComplete) {
+      // Recalculate elapsed time immediately
+      setElapsedSeconds(Math.floor((Date.now() - startTimeRef.current.getTime()) / 1000));
+    }
+
+    // Recalculate rest timer if active
+    if (restEndTimeRef.current !== null) {
+      const remainingMs = restEndTimeRef.current - Date.now();
+      if (remainingMs <= 0) {
+        // Rest timer completed while in background - trigger completion
+        setRestSeconds(0);
+      } else {
+        setRestSeconds(Math.ceil(remainingMs / 1000));
+      }
+    }
+  }, [isComplete]);
+
+  // Subscribe to app state changes
+  useAppState(handleForeground);
 
   const weightUnit = settings.weightUnit as WeightUnit;
   const defaultRestSeconds = settings.defaultRestSeconds;
@@ -114,11 +138,16 @@ export default function ActiveWorkoutScreen() {
     return () => clearInterval(interval);
   }, [isComplete]);
 
-  // Rest timer effect
+  // Rest timer effect - uses wall-clock calculation for accuracy after background
   useEffect(() => {
-    if (restSeconds === null || restSeconds <= 0) return;
+    if (restSeconds === null || restSeconds <= 0 || restEndTimeRef.current === null) return;
     const interval = setInterval(() => {
-      setRestSeconds(prev => (prev !== null && prev > 0 ? prev - 1 : null));
+      const remainingMs = restEndTimeRef.current! - Date.now();
+      if (remainingMs <= 0) {
+        setRestSeconds(0);
+      } else {
+        setRestSeconds(Math.ceil(remainingMs / 1000));
+      }
     }, 1000);
     return () => clearInterval(interval);
   }, [restSeconds]);
@@ -142,6 +171,7 @@ export default function ActiveWorkoutScreen() {
     if (restSeconds === 0) {
       soundRef.current?.replayAsync();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      restEndTimeRef.current = null;
       setRestSeconds(null);
       setShowRestOverlay(false);
     }
@@ -226,6 +256,8 @@ export default function ActiveWorkoutScreen() {
         ),
       };
     }));
+    // Set wall-clock end time for accurate timer after background
+    restEndTimeRef.current = Date.now() + effectiveRestSeconds * 1000;
     setRestSeconds(effectiveRestSeconds);
     setShowRestOverlay(true);
   };
