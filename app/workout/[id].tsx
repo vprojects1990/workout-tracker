@@ -601,7 +601,8 @@ function SetRow({
   const handleComplete = () => {
     const repsNum = parseInt(reps, 10);
     const weightNum = parseFloat(weight);
-    if (!isNaN(repsNum) && !isNaN(weightNum)) {
+    // Validate: reps must be positive, weight must be non-negative
+    if (!isNaN(repsNum) && !isNaN(weightNum) && repsNum > 0 && weightNum >= 0) {
       onComplete(repsNum, weightNum);
     }
   };

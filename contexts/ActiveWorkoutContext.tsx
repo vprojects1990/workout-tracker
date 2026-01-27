@@ -94,6 +94,10 @@ export function ActiveWorkoutProvider({ children }: { children: React.ReactNode 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const restTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Ref to avoid stale closures in callbacks
+  const activeWorkoutRef = useRef<ActiveWorkoutState | null>(null);
+  activeWorkoutRef.current = activeWorkout;
+
   // Handle app returning from background - recalculate timers
   const handleForeground = useCallback(() => {
     if (activeWorkout) {
@@ -211,39 +215,48 @@ export function ActiveWorkoutProvider({ children }: { children: React.ReactNode 
       templateName: string,
       exerciseList: WorkoutExercise[]
     ) => {
-      const sessionId = `session-${Date.now()}`;
+      const sessionId = `session-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
       const startedAt = new Date();
 
-      await db.insert(workoutSessions).values({
-        id: sessionId,
-        templateId,
-        templateName,
-        startedAt,
-        completedAt: null,
-        durationSeconds: null,
-      });
+      try {
+        await db.insert(workoutSessions).values({
+          id: sessionId,
+          templateId,
+          templateName,
+          startedAt,
+          completedAt: null,
+          durationSeconds: null,
+        });
 
-      setActiveWorkout({
-        sessionId,
-        templateId,
-        templateName,
-        startedAt,
-        exercises: exerciseList,
-        restEndTime: null,
-      });
+        setActiveWorkout({
+          sessionId,
+          templateId,
+          templateName,
+          startedAt,
+          exercises: exerciseList,
+          restEndTime: null,
+        });
+      } catch (error) {
+        console.error('Failed to start workout:', error);
+        throw error;
+      }
     },
     []
   );
 
   const completeSet = useCallback(
     async (exerciseInstanceId: string, setNumber: number, reps: number, weight: number) => {
-      if (!activeWorkout) return;
+      // Use ref to avoid stale closure
+      const workout = activeWorkoutRef.current;
+      if (!workout) return;
 
-      const exercise = activeWorkout.exercises.find(e => e.id === exerciseInstanceId);
+      const exercise = workout.exercises.find(e => e.id === exerciseInstanceId);
       if (!exercise) return;
 
-      const setId = `set-${Date.now()}-${setNumber}`;
+      // Generate unique ID with random suffix to avoid collisions
+      const setId = `set-${Date.now()}-${setNumber}-${Math.random().toString(36).substring(2, 9)}`;
 
+      // Optimistic update
       setActiveWorkout(prev => {
         if (!prev) return null;
         return {
@@ -266,7 +279,7 @@ export function ActiveWorkoutProvider({ children }: { children: React.ReactNode 
       try {
         await db.insert(setLogs).values({
           id: setId,
-          sessionId: activeWorkout.sessionId,
+          sessionId: workout.sessionId,
           exerciseId: exercise.exerciseId,
           setNumber,
           reps,
@@ -274,6 +287,7 @@ export function ActiveWorkoutProvider({ children }: { children: React.ReactNode 
           restSeconds: null,
         });
 
+        // Mark as synced
         setActiveWorkout(prev => {
           if (!prev) return null;
           return {
@@ -290,9 +304,29 @@ export function ActiveWorkoutProvider({ children }: { children: React.ReactNode 
         });
       } catch (error) {
         console.error('Failed to save set to DB:', error);
+        // Rollback optimistic update on failure
+        setActiveWorkout(prev => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            exercises: prev.exercises.map(ex =>
+              ex.id === exerciseInstanceId
+                ? {
+                    ...ex,
+                    sets: ex.sets.map(s =>
+                      s.id === setId
+                        ? { ...s, reps: null, weight: null, completed: false, dbSynced: false }
+                        : s
+                    ),
+                  }
+                : ex
+            ),
+          };
+        });
+        throw error;
       }
     },
-    [activeWorkout]
+    [] // Stable callback - uses ref
   );
 
   const addSet = useCallback((exerciseInstanceId: string) => {
@@ -415,27 +449,42 @@ export function ActiveWorkoutProvider({ children }: { children: React.ReactNode 
   }, []);
 
   const completeWorkout = useCallback(async () => {
-    if (!activeWorkout) return;
+    const workout = activeWorkoutRef.current;
+    if (!workout) return;
 
-    await db
-      .update(workoutSessions)
-      .set({
-        completedAt: new Date(),
-        durationSeconds: elapsedSeconds,
-      })
-      .where(eq(workoutSessions.id, activeWorkout.sessionId));
+    // Compute duration at call time to avoid stale elapsedSeconds
+    const durationSeconds = Math.floor((Date.now() - workout.startedAt.getTime()) / 1000);
 
-    setActiveWorkout(null);
-  }, [activeWorkout, elapsedSeconds]);
+    try {
+      await db
+        .update(workoutSessions)
+        .set({
+          completedAt: new Date(),
+          durationSeconds,
+        })
+        .where(eq(workoutSessions.id, workout.sessionId));
+
+      setActiveWorkout(null);
+    } catch (error) {
+      console.error('Failed to complete workout:', error);
+      throw error;
+    }
+  }, []);
 
   const abandonWorkout = useCallback(async () => {
-    if (!activeWorkout) return;
+    const workout = activeWorkoutRef.current;
+    if (!workout) return;
 
-    await db.delete(setLogs).where(eq(setLogs.sessionId, activeWorkout.sessionId));
-    await db.delete(workoutSessions).where(eq(workoutSessions.id, activeWorkout.sessionId));
+    try {
+      await db.delete(setLogs).where(eq(setLogs.sessionId, workout.sessionId));
+      await db.delete(workoutSessions).where(eq(workoutSessions.id, workout.sessionId));
 
-    setActiveWorkout(null);
-  }, [activeWorkout]);
+      setActiveWorkout(null);
+    } catch (error) {
+      console.error('Failed to abandon workout:', error);
+      throw error;
+    }
+  }, []);
 
   // -------------------------------------------------------------------------
   // Context Value
@@ -512,7 +561,8 @@ async function rebuildExerciseState(
     const exerciseInfo = exerciseDetails.find(e => e.id === exerciseId);
     if (!exerciseInfo) continue;
 
-    const maxSetNumber = Math.max(...sets.map(s => s.setNumber));
+    // Defensive check for empty sets array
+    const maxSetNumber = sets.length > 0 ? Math.max(...sets.map(s => s.setNumber)) : 0;
     const setsArray: SetData[] = [];
 
     for (let i = 1; i <= maxSetNumber; i++) {
