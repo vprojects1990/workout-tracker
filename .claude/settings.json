@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Code modified. Remember: (1) Use code-reviewer agent after changes. (2) Use security-reviewer before merging. (3) Ensure you're on a feature branch, not main."
+          }
+        ]
+      }
+    ]
+  }
+}
