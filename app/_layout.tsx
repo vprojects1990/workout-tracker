@@ -11,10 +11,10 @@ import { useColorScheme } from '@/components/useColorScheme';
 import { DatabaseProvider, useDatabase } from '@/contexts/DatabaseContext';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { View, Text } from '@/components/Themed';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
-export {
-  ErrorBoundary,
-} from 'expo-router';
+// Re-export our custom ErrorBoundary for expo-router to use
+export { ErrorBoundary } from '@/components/ErrorBoundary';
 
 export const unstable_settings = {
   initialRouteName: '(tabs)',
@@ -81,7 +81,9 @@ function DatabaseReadyGate() {
   // Database is ready, now we can use ThemeProvider which accesses the database
   return (
     <ThemeProvider>
-      <RootLayoutNav />
+      <ErrorBoundary>
+        <RootLayoutNav />
+      </ErrorBoundary>
     </ThemeProvider>
   );
 }
