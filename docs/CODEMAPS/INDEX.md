@@ -1,6 +1,6 @@
 # Workout Tracker - Architecture Overview
 
-> Version 0.8.0 | Last updated: 2026-01-31
+> Version 0.8.1 | Last updated: 2026-01-31
 
 ## Project Overview
 

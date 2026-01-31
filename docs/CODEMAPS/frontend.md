@@ -1,6 +1,6 @@
 # Frontend Architecture
 
-> Last updated: 2026-01-31
+> Last updated: 2026-01-31 (rev 2)
 
 ## Entry Point
 
@@ -17,20 +17,29 @@ The app entry point is `app/_layout.tsx`, which sets up:
 // app/_layout.tsx structure
 <GestureHandlerRootView>
   <DatabaseProvider>
-    <ActiveWorkoutProvider>
+    <DatabaseReadyGate>          {/* Waits for DB init */}
       <ThemeProvider>
-      <NavigationThemeProvider>
-        <Stack>
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="workout/[id]" presentation="modal" />
-          ...
-        </Stack>
-      </NavigationThemeProvider>
+        <ActiveWorkoutProvider>
+          <ErrorBoundary>
+            <NavigationThemeProvider>
+              <Stack>
+                <Stack.Screen name="(tabs)" />
+                <Stack.Screen name="workout/[id]" presentation="modal" />
+                <Stack.Screen name="workout/empty" presentation="modal" />
+                <Stack.Screen name="workout/create-split" presentation="modal" />
+                <Stack.Screen name="settings" presentation="modal" />
+                <Stack.Screen name="feedback" presentation="modal" />
+              </Stack>
+            </NavigationThemeProvider>
+          </ErrorBoundary>
+        </ActiveWorkoutProvider>
       </ThemeProvider>
-    </ActiveWorkoutProvider>
+    </DatabaseReadyGate>
   </DatabaseProvider>
 </GestureHandlerRootView>
 ```
+
+**Note:** The `DatabaseReadyGate` component gates rendering until SQLite is initialized and migrations have run. This prevents hooks from accessing the database before it is ready. A previous `modal` route reference was removed as part of dead code cleanup (the `modal.tsx` file no longer exists).
 
 ## Screen Structure
 
