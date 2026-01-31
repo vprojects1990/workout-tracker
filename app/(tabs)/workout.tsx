@@ -234,7 +234,7 @@ export default function WorkoutScreen() {
           <View style={[styles.resumeIconContainer, { backgroundColor: colors.warning + '20' }]}>
             <Ionicons name="play-circle" size={28} color={colors.warning} />
           </View>
-          <View style={styles.resumeTextContainer}>
+          <View style={[styles.resumeTextContainer, { backgroundColor: 'transparent' }]}>
             <Text style={[styles.resumeTitle, { color: colors.text }]}>
               Resume Workout
             </Text>
