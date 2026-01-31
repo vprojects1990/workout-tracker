@@ -80,7 +80,7 @@ interface ErrorFallbackProps {
  * Default fallback UI shown when an error occurs.
  * Uses a function component to access hooks for theming.
  */
-export function ErrorFallback({
+function ErrorFallback({
   error,
   onRetry,
   title = 'Something went wrong',
@@ -131,26 +131,6 @@ export function ErrorFallback({
   );
 }
 
-/**
- * HOC to wrap a screen component with an error boundary.
- * Useful for wrapping individual screens to isolate failures.
- */
-export function withErrorBoundary<P extends object>(
-  WrappedComponent: React.ComponentType<P>,
-  fallback?: ReactNode
-): React.FC<P> {
-  const displayName = WrappedComponent.displayName || WrappedComponent.name || 'Component';
-
-  const WithErrorBoundary: React.FC<P> = (props) => (
-    <ErrorBoundary fallback={fallback}>
-      <WrappedComponent {...props} />
-    </ErrorBoundary>
-  );
-
-  WithErrorBoundary.displayName = `withErrorBoundary(${displayName})`;
-
-  return WithErrorBoundary;
-}
 
 const styles = StyleSheet.create({
   container: {

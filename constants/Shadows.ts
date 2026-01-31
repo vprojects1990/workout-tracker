@@ -1,4 +1,4 @@
-import { Platform, ViewStyle } from 'react-native';
+import { ViewStyle } from 'react-native';
 
 type ShadowStyle = Pick<
   ViewStyle,
@@ -91,20 +91,5 @@ export const ShadowStyles = {
   inputFocused: Shadows.small,
 };
 
-// Helper to apply shadow conditionally based on theme
-// In dark mode, shadows are less visible, so we can optionally reduce opacity
-export function getShadow(
-  shadow: ShadowStyle,
-  isDarkMode: boolean = false
-): ShadowStyle {
-  if (isDarkMode) {
-    const opacity = typeof shadow.shadowOpacity === 'number' ? shadow.shadowOpacity : 0;
-    return {
-      ...shadow,
-      shadowOpacity: opacity * 0.5,
-    };
-  }
-  return shadow;
-}
 
 export default Shadows;
