@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert } from 'react-native';
+import { StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert, View as RNView } from 'react-native';
 import { Text, View, useColors } from '@/components/Themed';
 import { useWorkoutSplits, useWorkoutMutations, TemplateWithDetails, SplitWithTemplates } from '@/hooks/useWorkoutTemplates';
 import { useWorkoutDashboard } from '@/hooks/useWorkoutDashboard';
@@ -225,23 +225,23 @@ export default function WorkoutScreen() {
       {/* Resume Workout Banner */}
       {hasActiveWorkout && activeWorkout && (
         <Pressable
-          style={[styles.resumeBanner, { backgroundColor: colors.warning + '15', borderColor: colors.warning + '40' }]}
+          style={[styles.resumeBanner, { backgroundColor: 'rgba(255, 149, 0, 0.10)', borderColor: 'rgba(255, 149, 0, 0.25)' }]}
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
             router.push(`/workout/${activeWorkout.templateId || 'empty'}`);
           }}
         >
-          <View style={[styles.resumeIconContainer, { backgroundColor: colors.warning + '20' }]}>
+          <RNView style={[styles.resumeIconContainer, { backgroundColor: 'rgba(255, 149, 0, 0.15)' }]}>
             <Ionicons name="play-circle" size={28} color={colors.warning} />
-          </View>
-          <View style={[styles.resumeTextContainer, { backgroundColor: 'transparent' }]}>
-            <Text style={[styles.resumeTitle, { color: colors.text }]}>
+          </RNView>
+          <RNView style={styles.resumeTextContainer}>
+            <Text style={[styles.resumeTitle, { color: colors.text, backgroundColor: 'transparent' }]}>
               Resume Workout
             </Text>
-            <Text style={[styles.resumeSubtitle, { color: colors.textSecondary }]}>
+            <Text style={[styles.resumeSubtitle, { color: colors.textSecondary, backgroundColor: 'transparent' }]}>
               {activeWorkout.templateName} - {formatElapsedTime(activeWorkout.startedAt)}
             </Text>
-          </View>
+          </RNView>
           <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
         </Pressable>
       )}
