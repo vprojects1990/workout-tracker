@@ -1,6 +1,6 @@
 # Frontend Architecture
 
-> Last updated: 2026-01-26
+> Last updated: 2026-01-31
 
 ## Entry Point
 
@@ -9,14 +9,16 @@ The app entry point is `app/_layout.tsx`, which sets up:
 1. **Font Loading** - DM Sans font family + SpaceMono for numbers
 2. **Gesture Handler** - `GestureHandlerRootView` wrapper
 3. **Database Provider** - Initializes SQLite and runs migrations
-4. **Theme Provider** - Manages light/dark theme based on user preference
-5. **Navigation** - Stack navigator with tabs and modal screens
+4. **Active Workout Provider** - Persists in-progress workouts across app restarts
+5. **Theme Provider** - Manages light/dark theme based on user preference
+6. **Navigation** - Stack navigator with tabs and modal screens
 
 ```tsx
 // app/_layout.tsx structure
 <GestureHandlerRootView>
   <DatabaseProvider>
-    <ThemeProvider>
+    <ActiveWorkoutProvider>
+      <ThemeProvider>
       <NavigationThemeProvider>
         <Stack>
           <Stack.Screen name="(tabs)" />
@@ -24,7 +26,8 @@ The app entry point is `app/_layout.tsx`, which sets up:
           ...
         </Stack>
       </NavigationThemeProvider>
-    </ThemeProvider>
+      </ThemeProvider>
+    </ActiveWorkoutProvider>
   </DatabaseProvider>
 </GestureHandlerRootView>
 ```
@@ -88,13 +91,6 @@ The app entry point is `app/_layout.tsx`, which sets up:
 |-----------|---------|
 | `HistoryCard.tsx` | Workout session summary card |
 | `VolumeChart.tsx` | Volume over time chart |
-
-### Insights Components (`components/insights/`)
-
-| Component | Purpose |
-|-----------|---------|
-| `ProgressSparkline.tsx` | Mini line chart for progress trends |
-| `SummaryStats.tsx` | Aggregate statistics display |
 
 ### Animation Components (`components/animations/`)
 

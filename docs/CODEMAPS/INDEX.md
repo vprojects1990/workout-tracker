@@ -1,6 +1,6 @@
 # Workout Tracker - Architecture Overview
 
-> Version 0.7.0 | Last updated: 2026-01-26
+> Version 0.8.0 | Last updated: 2026-01-31
 
 ## Project Overview
 
@@ -63,7 +63,6 @@ workout-tracker/
 │   ├── dashboard/               # Dashboard widgets
 │   ├── workout/                 # Workout session components
 │   ├── history/                 # History list components
-│   ├── insights/                # Analytics components
 │   ├── animations/              # Animation components
 │   └── wizard/                  # Multi-step form components
 ├── constants/                    # Design tokens
@@ -72,6 +71,7 @@ workout-tracker/
 │   ├── Spacing.ts               # Spacing scale
 │   └── Shadows.ts               # Shadow definitions
 ├── contexts/                     # React contexts
+│   ├── ActiveWorkoutContext.tsx # Workout persistence & resume
 │   ├── DatabaseContext.tsx      # Database initialization
 │   └── ThemeContext.tsx         # Theme management
 ├── db/                          # Database layer
@@ -85,7 +85,12 @@ workout-tracker/
 │   ├── useWorkoutHistory.ts     # Past sessions
 │   ├── useWorkoutDashboard.ts   # Dashboard data
 │   ├── useProgressiveOverload.ts # Progress tracking
-│   └── useSettings.ts           # User preferences
+│   ├── useSettings.ts           # User preferences
+│   ├── useAppState.ts           # App state tracking
+│   └── __tests__/               # Unit tests
+│       ├── convertWeight.test.ts
+│       ├── determineStatus.test.ts
+│       └── useWorkoutDashboard.test.ts
 ├── utils/                       # Utility functions
 │   └── haptics.ts               # Haptic feedback helpers
 └── assets/                      # Static assets
@@ -106,6 +111,8 @@ workout-tracker/
 | Gestures | react-native-gesture-handler | 2.28.0 |
 | Audio | expo-av | 16.0.8 |
 | Haptics | expo-haptics | 15.0.8 |
+| Testing | Jest (jest-expo) | 54.0.16 |
+| Test Utils | @testing-library/react-native | 13.3.3 |
 
 ## Data Flow
 
@@ -171,6 +178,24 @@ Stack Navigator (Root)
 |---------|---------|-------------|
 | Vercel Functions | Feedback API | POST /api/feedback |
 | GitHub Issues | Bug tracking | Created via Vercel API |
+
+## Testing
+
+The project uses **Jest** with the `jest-expo` preset and **React Native Testing Library** for component testing.
+
+### Test Configuration
+- Config: `jest.config.js` (jest-expo preset, `@/` path alias support)
+- Setup: `jest.setup.js`
+- Test location: `hooks/__tests__/`
+- Run: `npm test` or `npm run test:coverage`
+
+### Test Coverage
+
+| Test File | Module Under Test | What It Tests |
+|-----------|------------------|---------------|
+| `convertWeight.test.ts` | Weight conversion utility | kg/lbs conversion logic |
+| `determineStatus.test.ts` | Set status determination | Workout set status logic |
+| `useWorkoutDashboard.test.ts` | Dashboard helpers | Dashboard data computation |
 
 ## Related Documentation
 
