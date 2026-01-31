@@ -1,7 +1,7 @@
-import { Platform, TextStyle } from 'react-native';
+import { TextStyle } from 'react-native';
 
 // Font families
-export const FontFamilies = {
+const FontFamilies = {
   // Display font - for headers and titles
   display: {
     regular: 'DMSans-Regular',
@@ -270,7 +270,5 @@ export const TextStyles = {
     fontVariant: ['tabular-nums'],
   } as TextStyle,
 };
-
-export const FontWeights = fontWeights;
 
 export default Typography;

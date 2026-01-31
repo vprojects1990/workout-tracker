@@ -77,13 +77,5 @@ export const Layout = {
   iconSizeXL: 28,
 };
 
-// Gap values for flexbox layouts
-export const Gap = {
-  xs: Spacing.xs,
-  sm: Spacing.sm,
-  md: Spacing.md,
-  lg: Spacing.lg,
-  xl: Spacing.xl,
-};
 
 export default Spacing;
