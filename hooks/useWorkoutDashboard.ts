@@ -18,7 +18,7 @@ export interface DashboardData {
   workedOutToday: boolean;
 }
 
-function getStartOfWeek(date: Date): Date {
+export function getStartOfWeek(date: Date): Date {
   const d = new Date(date);
   const day = d.getDay();
   // Adjust so Monday is the start of the week (day 0)
@@ -28,7 +28,7 @@ function getStartOfWeek(date: Date): Date {
   return d;
 }
 
-function getStartOfDay(date: Date): Date {
+export function getStartOfDay(date: Date): Date {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
   return d;

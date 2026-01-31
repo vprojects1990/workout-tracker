@@ -33,7 +33,7 @@ export type ProgressiveOverloadOptions = {
   templateId?: string;
 };
 
-function determineStatus(
+export function determineStatus(
   lastReps: number[],
   prevReps: number[],
   targetMax: number,
