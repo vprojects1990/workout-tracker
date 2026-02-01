@@ -121,6 +121,27 @@ export async function runMigrations() {
     VALUES ('default', 2000, 150, 250, 65, ${Math.floor(Date.now() / 1000)})
   `);
 
+  // Food search cache tables
+  await db.run(sql`
+    CREATE TABLE IF NOT EXISTS food_cache (
+      fdc_id INTEGER PRIMARY KEY,
+      description TEXT NOT NULL,
+      calories_per_100g REAL NOT NULL,
+      protein_per_100g REAL NOT NULL,
+      carbs_per_100g REAL NOT NULL,
+      fat_per_100g REAL NOT NULL,
+      cached_at INTEGER NOT NULL
+    )
+  `);
+
+  await db.run(sql`
+    CREATE TABLE IF NOT EXISTS food_search_cache (
+      query TEXT PRIMARY KEY,
+      fdc_ids TEXT NOT NULL,
+      cached_at INTEGER NOT NULL
+    )
+  `);
+
   // Migration: Add split_id column to workout_templates if it doesn't exist
   // This handles databases created before splits were introduced
   try {

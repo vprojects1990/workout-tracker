@@ -84,6 +84,24 @@ export const mealLogs = sqliteTable('meal_logs', {
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
 });
 
+// Food search cache - stores nutrient data per USDA food item
+export const foodCache = sqliteTable('food_cache', {
+  fdcId: integer('fdc_id').primaryKey(),
+  description: text('description').notNull(),
+  caloriesPer100g: real('calories_per_100g').notNull(),
+  proteinPer100g: real('protein_per_100g').notNull(),
+  carbsPer100g: real('carbs_per_100g').notNull(),
+  fatPer100g: real('fat_per_100g').notNull(),
+  cachedAt: integer('cached_at').notNull(),
+});
+
+// Food search query cache - maps queries to result IDs
+export const foodSearchCache = sqliteTable('food_search_cache', {
+  query: text('query').primaryKey(),
+  fdcIds: text('fdc_ids').notNull(), // JSON array of fdc_id integers
+  cachedAt: integer('cached_at').notNull(),
+});
+
 // User settings
 export const userSettings = sqliteTable('user_settings', {
   id: text('id').primaryKey().default('default'),
@@ -110,3 +128,5 @@ export type MealTarget = typeof mealTargets.$inferSelect;
 export type NewMealTarget = typeof mealTargets.$inferInsert;
 export type MealLog = typeof mealLogs.$inferSelect;
 export type NewMealLog = typeof mealLogs.$inferInsert;
+export type FoodCache = typeof foodCache.$inferSelect;
+export type FoodSearchCache = typeof foodSearchCache.$inferSelect;

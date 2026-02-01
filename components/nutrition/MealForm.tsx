@@ -6,6 +6,8 @@ import { Typography } from '@/constants/Typography';
 import { Spacing, Radius, Layout } from '@/constants/Spacing';
 import { haptics } from '@/utils/haptics';
 import { pickMealPhoto, saveMealPhoto, getMealPhotoUri, deleteMealPhoto } from '@/utils/mealImage';
+import { FoodSearchModal } from './FoodSearchModal';
+import type { EstimatedMacros } from '@/utils/foodSearch';
 
 export type MealFormData = {
   name: string;
@@ -33,6 +35,7 @@ export function MealForm({ onSubmit, onCancel, initialValues, loading }: MealFor
   const [photoFilename, setPhotoFilename] = useState<string | null>(initialValues?.photoFilename ?? null);
   const [newlySavedPhotos, setNewlySavedPhotos] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [foodSearchVisible, setFoodSearchVisible] = useState(false);
 
   const handleSubmit = () => {
     const trimmedName = name.trim();
@@ -87,6 +90,15 @@ export function MealForm({ onSubmit, onCancel, initialValues, loading }: MealFor
     onCancel();
   };
 
+  const handleFoodSelected = (macros: EstimatedMacros) => {
+    setName(macros.name);
+    setCalories(String(macros.calories));
+    setProtein(String(macros.protein));
+    setCarbs(String(macros.carbs));
+    setFat(String(macros.fat));
+    setError(null);
+  };
+
   const inputStyle = [
     styles.input,
     { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.separator },
@@ -101,6 +113,14 @@ export function MealForm({ onSubmit, onCancel, initialValues, loading }: MealFor
         <Text style={[styles.title, { color: colors.text }]}>
           {initialValues ? 'Edit Meal' : 'Add Meal'}
         </Text>
+
+        <Pressable
+          onPress={() => setFoodSearchVisible(true)}
+          style={[styles.searchButton, { borderColor: colors.accent }]}
+        >
+          <Ionicons name="search" size={18} color={colors.accent} />
+          <Text style={[styles.searchButtonText, { color: colors.accent }]}>Search Food</Text>
+        </Pressable>
 
         {error && <Text style={[styles.error, { color: colors.error }]}>{error}</Text>}
 
@@ -183,6 +203,11 @@ export function MealForm({ onSubmit, onCancel, initialValues, loading }: MealFor
             <Text style={[styles.buttonText, { color: colors.buttonPrimaryText }]}>Save Meal</Text>
           </Pressable>
         </View>
+        <FoodSearchModal
+          visible={foodSearchVisible}
+          onClose={() => setFoodSearchVisible(false)}
+          onSelect={handleFoodSelected}
+        />
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -198,6 +223,20 @@ const styles = StyleSheet.create({
   title: {
     ...Typography.title2,
     marginBottom: Spacing.lg,
+  },
+  searchButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: Spacing.md,
+    borderWidth: 1,
+    borderRadius: Radius.medium,
+    marginBottom: Spacing.md,
+    gap: Spacing.sm,
+  },
+  searchButtonText: {
+    ...Typography.subhead,
+    fontWeight: '600',
   },
   error: {
     ...Typography.footnote,

@@ -5,3 +5,6 @@ export { MealForm } from './MealForm';
 export type { MealFormData } from './MealForm';
 export { MacroTargetsForm } from './MacroTargetsForm';
 export { NutritionEmptyState } from './NutritionEmptyState';
+export { FoodSearchModal } from './FoodSearchModal';
+export { FoodResultRow } from './FoodResultRow';
+export { WeightInputPanel } from './WeightInputPanel';
