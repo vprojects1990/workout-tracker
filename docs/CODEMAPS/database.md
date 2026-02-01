@@ -1,6 +1,6 @@
 # Database Architecture
 
-> Last updated: 2026-01-31
+> Last updated: 2026-02-01
 
 ## Technology
 
@@ -71,6 +71,20 @@
 │ defaultRestSeconds  │
 │ theme               │
 └─────────────────────┘
+
+┌─────────────────────┐       ┌─────────────────────┐
+│    meal_targets     │       │     meal_logs       │
+├─────────────────────┤       ├─────────────────────┤
+│ id (PK, 'default') │       │ id (PK)             │
+│ calories            │       │ date (YYYY-MM-DD)   │
+│ protein             │       │ name                │
+│ carbs               │       │ calories            │
+│ fat                 │       │ protein             │
+│ updatedAt           │       │ carbs               │
+└─────────────────────┘       │ fat                 │
+                              │ photoFilename       │
+                              │ createdAt           │
+                              └─────────────────────┘
 ```
 
 ## Tables
@@ -149,6 +163,33 @@ Individual set records within a session.
 | reps | INTEGER | Reps performed |
 | weight | REAL | Weight used |
 | restSeconds | INTEGER | Rest taken after set |
+
+### `meal_targets`
+Daily macro targets (singleton row, upserted on update).
+
+| Column | Type | Default | Description |
+|--------|------|---------|-------------|
+| id | TEXT (PK) | 'default' | Singleton row |
+| calories | INTEGER | 2000 | Daily calorie target |
+| protein | INTEGER | 150 | Protein target (g) |
+| carbs | INTEGER | 250 | Carbs target (g) |
+| fat | INTEGER | 65 | Fat target (g) |
+| updatedAt | INTEGER | - | Last update timestamp |
+
+### `meal_logs`
+Individual meal entries, keyed by date for daily grouping.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | TEXT (PK) | Unique identifier |
+| date | TEXT | Date key (YYYY-MM-DD) |
+| name | TEXT | Meal name |
+| calories | INTEGER | Calories |
+| protein | REAL | Protein (g) |
+| carbs | REAL | Carbs (g) |
+| fat | REAL | Fat (g) |
+| photoFilename | TEXT | Photo filename (nullable), stored in meal-photos/ |
+| createdAt | INTEGER | Creation timestamp |
 
 ### `user_settings`
 User preferences.
@@ -243,6 +284,27 @@ Progress tracking and stall detection.
 ```typescript
 const { progress, trend, suggestion } = useProgressiveOverload(exerciseId);
 ```
+
+### `useMealTracking(selectedDate, weekOffset)`
+Full meal tracking: daily meals, macro targets, and weekly adherence summary.
+
+```typescript
+const {
+  meals,          // MealLog[] for selected date
+  targets,        // MealTarget | null (daily macro targets)
+  totals,         // MacroTotals (computed sum of meals)
+  weekSummary,    // WeekDaySummary[] (Mon-Fri adherence)
+  loading,
+  error,
+  addMeal,        // (input: MealInput) => Promise<void>
+  updateMeal,     // (id, partial) => Promise<void>
+  deleteMeal,     // (id) => Promise<void>  (also deletes photo)
+  updateTargets,  // (targets) => Promise<void>  (upsert)
+  refetch,
+} = useMealTracking(selectedDate, weekOffset);
+```
+
+Exported pure functions for testing: `computeMacroTotals()`, `getAdherenceStatus()`.
 
 ### `useSettings()`
 User preferences CRUD.
