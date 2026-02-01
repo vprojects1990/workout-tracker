@@ -1,6 +1,6 @@
 # Frontend Architecture
 
-> Last updated: 2026-01-31 (rev 2)
+> Last updated: 2026-02-01 (rev 3)
 
 ## Entry Point
 
@@ -49,6 +49,7 @@ The app entry point is `app/_layout.tsx`, which sets up:
 |--------|------|---------|
 | Workout | `workout.tsx` | Dashboard with splits, templates, suggested workout |
 | History | `history.tsx` | List of completed workout sessions |
+| Nutrition | `nutrition.tsx` | Meal logging, macro tracking, weekly adherence |
 | Insights | `insights.tsx` | Progress analytics and statistics |
 
 ### Modal Screens
@@ -100,6 +101,17 @@ The app entry point is `app/_layout.tsx`, which sets up:
 |-----------|---------|
 | `HistoryCard.tsx` | Workout session summary card |
 | `VolumeChart.tsx` | Volume over time chart |
+
+### Nutrition Components (`components/nutrition/`)
+
+| Component | Purpose |
+|-----------|---------|
+| `DaySelector.tsx` | Mon-Fri day picker with adherence status indicators |
+| `MacroRings.tsx` | Circular progress rings for calories, protein, carbs, fat |
+| `MealCard.tsx` | Single meal entry card with photo, macros, edit/delete |
+| `MealForm.tsx` | Add/edit meal form with macro inputs and photo picker |
+| `MacroTargetsForm.tsx` | Set daily calorie and macro targets |
+| `NutritionEmptyState.tsx` | Empty state shown when no meals logged for a day |
 
 ### Animation Components (`components/animations/`)
 
@@ -194,7 +206,7 @@ The app uses local state with custom hooks for data management:
 ## Navigation Patterns
 
 ### Tab Navigation
-- Bottom tab bar with 3 tabs
+- Bottom tab bar with 4 tabs (Workout, History, Nutrition, Insights)
 - Icons from `@expo/vector-icons/FontAwesome`
 - Active tab highlighted with brand color
 

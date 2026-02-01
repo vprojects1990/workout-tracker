@@ -85,6 +85,42 @@ export async function runMigrations() {
     VALUES ('default', 'kg', 90, 'system')
   `);
 
+  // Meal tracking tables
+  await db.run(sql`
+    CREATE TABLE IF NOT EXISTS meal_targets (
+      id TEXT PRIMARY KEY DEFAULT 'default',
+      calories INTEGER NOT NULL DEFAULT 2000,
+      protein INTEGER NOT NULL DEFAULT 150,
+      carbs INTEGER NOT NULL DEFAULT 250,
+      fat INTEGER NOT NULL DEFAULT 65,
+      updated_at INTEGER NOT NULL
+    )
+  `);
+
+  await db.run(sql`
+    CREATE TABLE IF NOT EXISTS meal_logs (
+      id TEXT PRIMARY KEY,
+      date TEXT NOT NULL,
+      name TEXT NOT NULL,
+      calories INTEGER NOT NULL,
+      protein REAL NOT NULL,
+      carbs REAL NOT NULL,
+      fat REAL NOT NULL,
+      photo_filename TEXT,
+      created_at INTEGER NOT NULL
+    )
+  `);
+
+  await db.run(sql`
+    CREATE INDEX IF NOT EXISTS idx_meal_logs_date ON meal_logs(date)
+  `);
+
+  // Initialize default meal targets
+  await db.run(sql`
+    INSERT OR IGNORE INTO meal_targets (id, calories, protein, carbs, fat, updated_at)
+    VALUES ('default', 2000, 150, 250, 65, ${Math.floor(Date.now() / 1000)})
+  `);
+
   // Migration: Add split_id column to workout_templates if it doesn't exist
   // This handles databases created before splits were introduced
   try {

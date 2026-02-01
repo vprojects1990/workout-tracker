@@ -24,6 +24,10 @@ jest.mock('expo-sqlite', () => ({
   })),
 }));
 
+jest.mock('expo-crypto', () => ({
+  randomUUID: () => '00000000-0000-0000-0000-000000000000',
+}));
+
 jest.mock('expo-image-picker', () => ({
   launchImageLibraryAsync: jest.fn(),
   MediaTypeOptions: { Images: 'Images' },

@@ -61,6 +61,29 @@ export const setLogs = sqliteTable('set_logs', {
   restSeconds: integer('rest_seconds'),
 });
 
+// Daily macro targets - single row, user updates as needed
+export const mealTargets = sqliteTable('meal_targets', {
+  id: text('id').primaryKey().default('default'),
+  calories: integer('calories').notNull().default(2000),
+  protein: integer('protein').notNull().default(150),
+  carbs: integer('carbs').notNull().default(250),
+  fat: integer('fat').notNull().default(65),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+});
+
+// Individual meal log entries
+export const mealLogs = sqliteTable('meal_logs', {
+  id: text('id').primaryKey(),
+  date: text('date').notNull(), // YYYY-MM-DD format
+  name: text('name').notNull(),
+  calories: integer('calories').notNull(),
+  protein: real('protein').notNull(),
+  carbs: real('carbs').notNull(),
+  fat: real('fat').notNull(),
+  photoFilename: text('photo_filename'), // relative filename, nullable
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+});
+
 // User settings
 export const userSettings = sqliteTable('user_settings', {
   id: text('id').primaryKey().default('default'),
@@ -83,3 +106,7 @@ export type NewWorkoutSession = typeof workoutSessions.$inferInsert;
 export type SetLog = typeof setLogs.$inferSelect;
 export type NewSetLog = typeof setLogs.$inferInsert;
 export type UserSettings = typeof userSettings.$inferSelect;
+export type MealTarget = typeof mealTargets.$inferSelect;
+export type NewMealTarget = typeof mealTargets.$inferInsert;
+export type MealLog = typeof mealLogs.$inferSelect;
+export type NewMealLog = typeof mealLogs.$inferInsert;

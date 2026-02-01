@@ -1,10 +1,10 @@
 # Workout Tracker - Architecture Overview
 
-> Version 0.8.1 | Last updated: 2026-01-31
+> Version 0.9.0 | Last updated: 2026-02-01
 
 ## Project Overview
 
-Workout Tracker is a React Native workout tracking application built with Expo. It provides workout template management, live session tracking, progressive overload monitoring, and workout history analysis.
+Workout Tracker is a React Native workout tracking application built with Expo. It provides workout template management, live session tracking, progressive overload monitoring, workout history analysis, and meal/nutrition tracking.
 
 ## System Architecture
 
@@ -51,6 +51,7 @@ workout-tracker/
 │   │   ├── _layout.tsx          # Tab bar configuration
 │   │   ├── workout.tsx          # Workout dashboard (home)
 │   │   ├── history.tsx          # Workout history list
+│   │   ├── nutrition.tsx        # Meal / nutrition tracking
 │   │   └── insights.tsx         # Progress & analytics
 │   ├── workout/                 # Workout-related modals
 │   │   ├── [id].tsx             # Active workout session
@@ -63,6 +64,7 @@ workout-tracker/
 │   ├── dashboard/               # Dashboard widgets
 │   ├── workout/                 # Workout session components
 │   ├── history/                 # History list components
+│   ├── nutrition/               # Meal tracking components
 │   ├── animations/              # Animation components
 │   └── wizard/                  # Multi-step form components
 ├── constants/                    # Design tokens
@@ -85,6 +87,7 @@ workout-tracker/
 │   ├── useWorkoutHistory.ts     # Past sessions
 │   ├── useWorkoutDashboard.ts   # Dashboard data
 │   ├── useProgressiveOverload.ts # Progress tracking
+│   ├── useMealTracking.ts       # Meal CRUD, targets & weekly summary
 │   ├── useSettings.ts           # User preferences
 │   ├── useAppState.ts           # App state tracking
 │   └── __tests__/               # Unit tests
@@ -92,7 +95,9 @@ workout-tracker/
 │       ├── determineStatus.test.ts
 │       └── useWorkoutDashboard.test.ts
 ├── utils/                       # Utility functions
-│   └── haptics.ts               # Haptic feedback helpers
+│   ├── haptics.ts               # Haptic feedback helpers
+│   ├── mealDates.ts             # Weekday date helpers (Mon-Fri)
+│   └── mealImage.ts             # Meal photo pick/save/delete
 └── assets/                      # Static assets
     ├── fonts/                   # Custom fonts (DM Sans)
     └── sounds/                  # Timer completion sounds
@@ -163,6 +168,7 @@ Stack Navigator (Root)
 ├── Tab Navigator
 │   ├── Workout Tab (index)    → workout.tsx
 │   ├── History Tab            → history.tsx
+│   ├── Nutrition Tab          → nutrition.tsx
 │   └── Insights Tab           → insights.tsx
 └── Modal Screens
     ├── workout/[id]           → Active workout
@@ -196,6 +202,10 @@ The project uses **Jest** with the `jest-expo` preset and **React Native Testing
 | `convertWeight.test.ts` | Weight conversion utility | kg/lbs conversion logic |
 | `determineStatus.test.ts` | Set status determination | Workout set status logic |
 | `useWorkoutDashboard.test.ts` | Dashboard helpers | Dashboard data computation |
+
+#### Nutrition Test Suite (113 tests across 15 suites)
+
+The meal tracking feature has comprehensive test coverage spanning utilities, hooks, and all UI components under `components/nutrition/__tests__/` and `hooks/__tests__/`.
 
 ## Related Documentation
 
