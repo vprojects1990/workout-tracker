@@ -1,6 +1,6 @@
 # Frontend Architecture
 
-> Last updated: 2026-02-01 (rev 3)
+> Last updated: 2026-02-01 (rev 4)
 
 ## Entry Point
 
@@ -109,9 +109,12 @@ The app entry point is `app/_layout.tsx`, which sets up:
 | `DaySelector.tsx` | Mon-Fri day picker with adherence status indicators |
 | `MacroRings.tsx` | Circular progress rings for calories, protein, carbs, fat |
 | `MealCard.tsx` | Single meal entry card with photo, macros, edit/delete |
-| `MealForm.tsx` | Add/edit meal form with macro inputs and photo picker |
+| `MealForm.tsx` | Add/edit meal form with macro inputs, photo picker, and "Search Food" button |
 | `MacroTargetsForm.tsx` | Set daily calorie and macro targets |
 | `NutritionEmptyState.tsx` | Empty state shown when no meals logged for a day |
+| `FoodSearchModal.tsx` | Full-screen modal for USDA food search with debounced input |
+| `FoodResultRow.tsx` | Single food result row showing name and cal/100g badge |
+| `WeightInputPanel.tsx` | Weight input (grams) with live macro preview and "Use" action |
 
 ### Animation Components (`components/animations/`)
 

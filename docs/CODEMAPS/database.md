@@ -1,6 +1,6 @@
 # Database Architecture
 
-> Last updated: 2026-02-01
+> Last updated: 2026-02-01 (rev 2)
 
 ## Technology
 
@@ -85,6 +85,18 @@
                               │ photoFilename       │
                               │ createdAt           │
                               └─────────────────────┘
+
+┌─────────────────────┐       ┌─────────────────────┐
+│    food_cache       │       │  food_search_cache  │
+├─────────────────────┤       ├─────────────────────┤
+│ fdcId (PK)          │◄──────│ query (PK)          │
+│ description         │  N:M  │ fdcIds (JSON)       │
+│ caloriesPer100g     │       │ cachedAt            │
+│ proteinPer100g      │       └─────────────────────┘
+│ carbsPer100g        │
+│ fatPer100g          │
+│ cachedAt            │
+└─────────────────────┘
 ```
 
 ## Tables
@@ -201,6 +213,28 @@ User preferences.
 | defaultRestSeconds | INTEGER | 90 | Default rest timer |
 | theme | TEXT | 'system' | light \| dark \| system |
 
+### `food_cache`
+Cached USDA food nutrient data (per 100g). Populated on search, expires after 30 days.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| fdcId | INTEGER (PK) | USDA FoodData Central ID |
+| description | TEXT | Food name/description |
+| caloriesPer100g | REAL | Calories per 100g |
+| proteinPer100g | REAL | Protein per 100g (g) |
+| carbsPer100g | REAL | Carbs per 100g (g) |
+| fatPer100g | REAL | Fat per 100g (g) |
+| cachedAt | INTEGER | Cache timestamp (ms) |
+
+### `food_search_cache`
+Maps search queries to cached food result IDs. Enables offline-first search.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| query | TEXT (PK) | Normalized search query (lowercased, trimmed) |
+| fdcIds | TEXT | JSON array of fdcId integers (preserves order) |
+| cachedAt | INTEGER | Cache timestamp (ms) |
+
 ## Custom Hooks
 
 ### `useWorkoutSplits()`
@@ -305,6 +339,16 @@ const {
 ```
 
 Exported pure functions for testing: `computeMacroTotals()`, `getAdherenceStatus()`.
+
+### `useFoodSearch()`
+Debounced USDA food search with loading/error state.
+
+```typescript
+const { query, results, loading, error, search, clear } = useFoodSearch();
+// search(text) - debounced (400ms), calls searchFoods() from utils/foodSearch
+// results: FoodItem[] - foods with per-100g nutrient data
+// clear() - resets state
+```
 
 ### `useSettings()`
 User preferences CRUD.

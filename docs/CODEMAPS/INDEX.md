@@ -1,10 +1,10 @@
 # Workout Tracker - Architecture Overview
 
-> Version 0.9.0 | Last updated: 2026-02-01
+> Version 0.10.0 | Last updated: 2026-02-01
 
 ## Project Overview
 
-Workout Tracker is a React Native workout tracking application built with Expo. It provides workout template management, live session tracking, progressive overload monitoring, workout history analysis, and meal/nutrition tracking.
+Workout Tracker is a React Native workout tracking application built with Expo. It provides workout template management, live session tracking, progressive overload monitoring, workout history analysis, meal/nutrition tracking, and USDA food search with weight-based macro estimation.
 
 ## System Architecture
 
@@ -26,11 +26,15 @@ Workout Tracker is a React Native workout tracking application built with Expo. 
 │                   │   SQLite    │                            │
 │                   │  (local DB) │                            │
 │                   └─────────────┘                            │
+│                          │                                   │
+│                   ┌──────▼──────┐                            │
+│                   │ Food Cache  │  (USDA search results)     │
+│                   └─────────────┘                            │
 └─────────────────────────────────────────────────────────────┘
-                           │
-                    Feedback API
-                           │
-                           ▼
+                     │              │
+              Feedback API    USDA FoodData
+                     │         Central API
+                     ▼              ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                    Vercel Functions                          │
 │                   (workout-tracker-api)                      │
@@ -88,6 +92,7 @@ workout-tracker/
 │   ├── useWorkoutDashboard.ts   # Dashboard data
 │   ├── useProgressiveOverload.ts # Progress tracking
 │   ├── useMealTracking.ts       # Meal CRUD, targets & weekly summary
+│   ├── useFoodSearch.ts         # Debounced USDA food search hook
 │   ├── useSettings.ts           # User preferences
 │   ├── useAppState.ts           # App state tracking
 │   └── __tests__/               # Unit tests
@@ -97,7 +102,10 @@ workout-tracker/
 ├── utils/                       # Utility functions
 │   ├── haptics.ts               # Haptic feedback helpers
 │   ├── mealDates.ts             # Weekday date helpers (Mon-Fri)
-│   └── mealImage.ts             # Meal photo pick/save/delete
+│   ├── mealImage.ts             # Meal photo pick/save/delete
+│   ├── foodSearch.ts            # USDA food search, caching & macro estimation
+│   └── __tests__/
+│       └── foodSearch.test.ts   # estimateMacros unit tests
 └── assets/                      # Static assets
     ├── fonts/                   # Custom fonts (DM Sans)
     └── sounds/                  # Timer completion sounds
@@ -178,12 +186,44 @@ Stack Navigator (Root)
     └── feedback               → Feedback form
 ```
 
+### Food Search Flow
+```
+User taps "Search Food" in MealForm
+        │
+        ▼
+FoodSearchModal opens → useFoodSearch() hook
+        │
+        ▼
+Debounced query (400ms) → searchFoods()
+        │
+        ▼
+Check foodSearchCache (SQLite)
+        │
+   ┌────┴────┐
+   │ HIT     │ MISS / STALE
+   │ (fresh) │
+   ▼         ▼
+Return    Fetch from USDA API
+cached    → Parse nutrients (per 100g)
+items     → Cache in foodCache + foodSearchCache
+              │
+              ▼
+User selects food → WeightInputPanel
+        │
+        ▼
+Enter weight (grams) → estimateMacros()
+        │
+        ▼
+"Use" → fills MealForm fields (name, calories, protein, carbs, fat)
+```
+
 ## External Services
 
 | Service | Purpose | Integration |
 |---------|---------|-------------|
 | Vercel Functions | Feedback API | POST /api/feedback |
 | GitHub Issues | Bug tracking | Created via Vercel API |
+| USDA FoodData Central | Food nutrient lookup | GET /fdc/v1/foods/search (free API key) |
 
 ## Testing
 
@@ -192,7 +232,7 @@ The project uses **Jest** with the `jest-expo` preset and **React Native Testing
 ### Test Configuration
 - Config: `jest.config.js` (jest-expo preset, `@/` path alias support)
 - Setup: `jest.setup.js`
-- Test location: `hooks/__tests__/`
+- Test location: `hooks/__tests__/`, `utils/__tests__/`
 - Run: `npm test` or `npm run test:coverage`
 
 ### Test Coverage
@@ -202,6 +242,7 @@ The project uses **Jest** with the `jest-expo` preset and **React Native Testing
 | `convertWeight.test.ts` | Weight conversion utility | kg/lbs conversion logic |
 | `determineStatus.test.ts` | Set status determination | Workout set status logic |
 | `useWorkoutDashboard.test.ts` | Dashboard helpers | Dashboard data computation |
+| `foodSearch.test.ts` | `estimateMacros()` | Weight-based macro scaling and rounding |
 
 #### Nutrition Test Suite (113 tests across 15 suites)
 

@@ -36,6 +36,11 @@ A modern, feature-rich workout tracking app built with React Native and Expo. Tr
 - **Workout History** - View past sessions with duration and stats
 - **Progress Insights** - Track your fitness journey over time
 
+### Nutrition
+- **Meal Tracking** - Log meals with calories, protein, carbs, fat, and photos
+- **USDA Food Search** - Search the USDA FoodData Central database and auto-fill macros by weight
+- **Weekly Overview** - Mon-Sun adherence view against daily macro targets
+
 ### Customization
 - **Dark Mode** - Automatic theme based on system preference
 - **Settings** - Weight units (kg/lbs), rest duration, and more
@@ -82,12 +87,18 @@ A modern, feature-rich workout tracking app built with React Native and Expo. Tr
    npm install
    ```
 
-3. Start the development server:
+3. Configure environment variables:
+   ```bash
+   # Optional: USDA food search (free key from https://fdc.nal.usda.gov/api-key-signup.html)
+   export USDA_API_KEY=your_key_here
+   ```
+
+4. Start the development server:
    ```bash
    npm start
    ```
 
-4. Scan the QR code with Expo Go (Android) or Camera app (iOS)
+5. Scan the QR code with Expo Go (Android) or Camera app (iOS)
 
 ### Building for Production
 
@@ -122,7 +133,7 @@ workout-tracker/
 ├── constants/            # Design tokens (Colors, Typography, Spacing, Shadows)
 ├── contexts/             # React contexts (Database, Theme)
 ├── db/                   # Database layer (schema, migrations, seed)
-├── hooks/                # Custom React hooks (7 data management hooks)
+├── hooks/                # Custom React hooks (9 data management hooks)
 ├── utils/                # Utility functions (haptics)
 └── assets/               # Fonts (DM Sans) and sounds
 ```

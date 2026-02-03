@@ -177,6 +177,26 @@ if (result.success) {
 }
 ```
 
+## Client-side External APIs
+
+### USDA FoodData Central
+
+The mobile app calls the USDA API directly (no backend proxy) for food nutrient searches.
+
+| Detail | Value |
+|--------|-------|
+| Base URL | `https://api.nal.usda.gov/fdc/v1/foods/search` |
+| Auth | Free API key via `USDA_API_KEY` env var (bundled in `app.config.ts` extra) |
+| Rate limit | 1000 requests/hour |
+| Data types | Foundation, SR Legacy |
+| Page size | 10 results |
+| Cache | SQLite `food_cache` + `food_search_cache` tables (30-day TTL) |
+| Offline | Returns stale cache on network failure |
+
+**Configuration:** `app.config.ts` reads `process.env.USDA_API_KEY` into `expo.extra.usdaApiKey`. The app reads it at runtime via `expo-constants`.
+
+**Note:** `app.json` was replaced by `app.config.ts` to support environment-based configuration.
+
 ## Future Considerations
 
 - **Rate Limiting**: Add custom rate limiting if abuse occurs
