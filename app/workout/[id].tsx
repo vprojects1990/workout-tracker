@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { StyleSheet, ScrollView, Pressable, TextInput, Modal, KeyboardAvoidingView, Platform, View as RNView, Alert } from 'react-native';
 import { Text, View, useColors } from '@/components/Themed';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useTemplateExercises, useAllExercises } from '@/hooks/useWorkoutTemplates';
+import { useTemplateExercises } from '@/hooks/useWorkoutTemplates';
+import { ExercisePickerModal, EQUIPMENT_LABELS } from '@/components/workout';
 import { useSettings, convertWeight, convertToKg, WeightUnit } from '@/hooks/useSettings';
 import { useActiveWorkoutContext, WorkoutExercise, SetData } from '@/contexts/ActiveWorkoutContext';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,27 +17,6 @@ import { Card, Button, SegmentedControl, SwipeableRow } from '@/components/ui';
 import { Typography } from '@/constants/Typography';
 import { Spacing, Radius } from '@/constants/Spacing';
 
-const EQUIPMENT_LABELS: Record<string, string> = {
-  barbell: 'Barbell',
-  dumbbell: 'Dumbbell',
-  cable: 'Cable',
-  machine: 'Machine',
-  bodyweight: 'Bodyweight',
-};
-
-const MUSCLE_LABELS: Record<string, string> = {
-  chest: 'Chest',
-  back: 'Back',
-  shoulders: 'Shoulders',
-  biceps: 'Biceps',
-  triceps: 'Triceps',
-  forearms: 'Forearms',
-  quads: 'Quads',
-  hamstrings: 'Hamstrings',
-  glutes: 'Glutes',
-  calves: 'Calves',
-  core: 'Core',
-};
 
 function formatTime(seconds: number): string {
   const mins = Math.floor(seconds / 60);
@@ -49,7 +29,6 @@ export default function ActiveWorkoutScreen() {
   const router = useRouter();
   const colors = useColors();
   const { exercises: templateExercises, loading: exercisesLoading } = useTemplateExercises(id || null);
-  const { exercises: allExercises } = useAllExercises();
   const { settings } = useSettings();
 
   // Use context for persistent workout state
@@ -76,7 +55,6 @@ export default function ActiveWorkoutScreen() {
   const [isComplete, setIsComplete] = useState(false);
   const [showRestOverlay, setShowRestOverlay] = useState(false);
   const [showExercisePicker, setShowExercisePicker] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
   const [activeExerciseMenu, setActiveExerciseMenu] = useState<string | null>(null);
   const [initialized, setInitialized] = useState(false);
 
@@ -196,7 +174,7 @@ export default function ActiveWorkoutScreen() {
     );
   };
 
-  const handleAddExercise = (exercise: { id: string; name: string; equipment: string }) => {
+  const handleAddExercise = (exercise: { id: string; name: string; equipment: string; primaryMuscle: string }) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     contextAddExercise({
       exerciseId: exercise.id,
@@ -204,7 +182,6 @@ export default function ActiveWorkoutScreen() {
       equipment: exercise.equipment,
     });
     setShowExercisePicker(false);
-    setSearchQuery('');
   };
 
   const handleRemoveExercise = (exerciseId: string) => {
@@ -253,18 +230,6 @@ export default function ActiveWorkoutScreen() {
   ) => {
     contextUpdateExerciseSettings(exerciseId, settings);
   };
-
-  const filteredExercises = allExercises.filter(ex =>
-    ex.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    ex.primaryMuscle.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const groupedExercises = filteredExercises.reduce((acc, ex) => {
-    const muscle = ex.primaryMuscle;
-    if (!acc[muscle]) acc[muscle] = [];
-    acc[muscle].push(ex);
-    return acc;
-  }, {} as Record<string, typeof filteredExercises>);
 
   const getActiveExercise = () => activeWorkout?.exercises.find(e => e.id === activeExerciseMenu);
 
@@ -392,55 +357,11 @@ export default function ActiveWorkoutScreen() {
       </KeyboardAvoidingView>
 
       {/* Exercise Picker Modal */}
-      <Modal visible={showExercisePicker} animationType="slide">
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={{ flex: 1 }}
-          keyboardVerticalOffset={60}
-        >
-          <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
-            <View style={[styles.modalHeader, { borderBottomColor: colors.separator }]}>
-              <Text style={[styles.modalTitle, { color: colors.text }]}>Add Exercise</Text>
-              <Pressable onPress={() => { setShowExercisePicker(false); setSearchQuery(''); }}>
-                <Ionicons name="close-circle-outline" size={28} color={colors.textSecondary} />
-              </Pressable>
-            </View>
-
-            <View style={styles.searchContainer}>
-              <Ionicons name="search" size={20} color={colors.textTertiary} style={styles.searchIcon} />
-              <TextInput
-                style={[styles.searchInput, { backgroundColor: colors.inputBackground, color: colors.text }]}
-                placeholder="Search exercises..."
-                placeholderTextColor={colors.textTertiary}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-              />
-            </View>
-
-            <ScrollView style={styles.exerciseList} keyboardShouldPersistTaps="handled">
-              {Object.entries(groupedExercises).map(([muscle, exercises]) => (
-                <View key={muscle} style={styles.muscleGroup}>
-                  <Text style={[styles.muscleTitle, { color: colors.textTertiary }]}>
-                    {MUSCLE_LABELS[muscle] || muscle}
-                  </Text>
-                  {exercises.map(ex => (
-                    <Pressable
-                      key={ex.id}
-                      style={[styles.exerciseItem, { borderBottomColor: colors.separator }]}
-                      onPress={() => handleAddExercise(ex)}
-                    >
-                      <Text style={[styles.exerciseItemName, { color: colors.text }]}>{ex.name}</Text>
-                      <Text style={[styles.exerciseItemEquipment, { color: colors.textTertiary }]}>
-                        {EQUIPMENT_LABELS[ex.equipment]}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-              ))}
-            </ScrollView>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
+      <ExercisePickerModal
+        visible={showExercisePicker}
+        onClose={() => setShowExercisePicker(false)}
+        onSelect={handleAddExercise}
+      />
 
       {/* Exercise Settings Action Sheet */}
       <Modal
@@ -756,52 +677,6 @@ const styles = StyleSheet.create({
   },
   addExerciseText: { ...Typography.headline },
   bottomPadding: { height: 100 },
-  // Modal styles
-  modalContainer: { flex: 1, paddingTop: 60 },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: Spacing.lg,
-    borderBottomWidth: 1,
-  },
-  modalTitle: { ...Typography.title2 },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    margin: Spacing.lg,
-  },
-  searchIcon: {
-    position: 'absolute',
-    left: Spacing.md,
-    zIndex: 1,
-  },
-  searchInput: {
-    flex: 1,
-    padding: Spacing.md,
-    paddingLeft: 44,
-    borderRadius: Radius.medium,
-    ...Typography.body,
-  },
-  exerciseList: { flex: 1 },
-  muscleGroup: { marginBottom: Spacing.lg },
-  muscleTitle: {
-    ...Typography.footnote,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
-  },
-  exerciseItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: Spacing.lg,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  exerciseItemName: { ...Typography.body },
-  exerciseItemEquipment: { ...Typography.footnote },
   // Complete screen
   completeContainer: {
     flex: 1,

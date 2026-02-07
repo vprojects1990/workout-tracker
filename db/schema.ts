@@ -35,9 +35,9 @@ export const templateExercises = sqliteTable('template_exercises', {
   templateId: text('template_id').notNull().references(() => workoutTemplates.id),
   exerciseId: text('exercise_id').notNull().references(() => exercises.id),
   orderIndex: integer('order_index').notNull(),
-  targetRepMin: integer('target_rep_min').notNull(),
-  targetRepMax: integer('target_rep_max').notNull(),
-  targetSets: integer('target_sets').notNull(),
+  targetRepMin: integer('target_rep_min'),
+  targetRepMax: integer('target_rep_max'),
+  targetSets: integer('target_sets'),
 });
 
 // Workout sessions - completed workouts
