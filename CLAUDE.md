@@ -15,6 +15,39 @@ This project enforces a disciplined agent-driven development workflow. All contr
 
 ---
 
+## Hook Behaviour (CRITICAL)
+
+This project uses PostToolUse hooks in `.claude/settings.json` that fire after every `Edit` or `Write` operation. These hooks are **informational reminders only**. They exist to remind you of the workflow rules — they are NOT stop signals.
+
+**Rules for handling hook reminders:**
+1. **DO NOT stop working** when a hook reminder fires. Continue implementing the current task.
+2. **DO NOT ask the user** to confirm or acknowledge hook messages. They are automatic.
+3. **Mentally note** the reminders (branch check, review needed, etc.) and address them at the appropriate phase — not after every file edit.
+4. **Complete the full implementation phase** before running code-reviewer or security-reviewer agents. Do not run reviews after each individual file change.
+5. **Check branch status once** at the start of implementation, not after every edit.
+
+**When to act on reminders:**
+- Branch check → Verify once at the start of Phase 4 (Implementation)
+- Code review → Run once after ALL implementation changes are complete (Phase 5)
+- Security review → Run once before merge (Phase 6)
+
+**Anti-pattern (what went wrong before):**
+```
+Edit file A → Hook fires → Stop and report to user → Wait
+Edit file B → Hook fires → Stop and report to user → Wait
+... repeated 15+ times, destroying flow
+```
+
+**Correct pattern:**
+```
+Edit file A → Hook fires → Note it, continue
+Edit file B → Hook fires → Note it, continue
+... complete all edits ...
+Run code-reviewer once → Fix issues → Run security-reviewer once → Merge
+```
+
+---
+
 ## Development Workflow (6 Phases)
 
 ### Phase 1: Requirements Gathering (use `/plan` skill)
@@ -248,15 +281,30 @@ Use the doc-updater agent to update documentation for the new feature
 - React functional components with hooks
 - Drizzle ORM for database queries
 - Follow existing patterns in codebase
+- Use `.substring()` not `.substr()` (deprecated)
+- Wrap `console.error` in `if (__DEV__)` guards for React Native
+
+### Database Migrations
+- Schema changes that modify column constraints require a migration in `db/migrations.ts`
+- SQLite does NOT support `ALTER COLUMN` — must recreate table (CREATE new → INSERT SELECT → DROP old → RENAME)
+- Always wrap table recreation in `BEGIN TRANSACTION` / `COMMIT` with `ROLLBACK` on error
+- Use `PRAGMA table_info(table_name)` to detect if migration is needed (check `notnull` flag)
+- Update both the initial `CREATE TABLE IF NOT EXISTS` AND add a migration block for existing users
+- Run `npx tsc --noEmit` after schema changes to catch all type errors across the codebase
 
 ### Testing
 - Write tests for new functionality
 - Run `npx tsc --noEmit` before committing
 - Test on iOS simulator before merging
 
+### Versioning
+- Version is defined in **both** `app.config.ts` and `package.json` — always update both
+- Increment the version when a new feature is added (e.g. 1.0.0 → 1.1.0)
+- Use semver: MAJOR.MINOR.PATCH (major = breaking changes, minor = new features, patch = bug fixes)
+
 ### Commits
 - Use conventional commits: `feat:`, `fix:`, `refactor:`, `docs:`, `perf:`
-- Include `Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>` when AI-assisted
+- Include `Co-Authored-By: Claude <model> <noreply@anthropic.com>` when AI-assisted (use actual model name, e.g. Claude Opus 4.6)
 - Reference issue numbers when applicable
 
 ---
