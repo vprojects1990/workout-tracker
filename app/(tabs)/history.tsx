@@ -9,39 +9,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { Card, Badge, SwipeableRow } from '@/components/ui';
 import { Typography } from '@/constants/Typography';
 import { Spacing, Radius } from '@/constants/Spacing';
-import * as Haptics from 'expo-haptics';
-
-const EQUIPMENT_LABELS: Record<string, string> = {
-  barbell: 'Barbell',
-  dumbbell: 'Dumbbell',
-  cable: 'Cable',
-  machine: 'Machine',
-  bodyweight: 'Bodyweight',
-};
-
-function formatDate(date: Date): string {
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-  if (diffDays === 0) {
-    return 'Today';
-  } else if (diffDays === 1) {
-    return 'Yesterday';
-  } else if (diffDays < 7) {
-    return date.toLocaleDateString('en-US', { weekday: 'long' });
-  } else {
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  }
-}
-
-function formatDuration(seconds: number): string {
-  const mins = Math.floor(seconds / 60);
-  if (mins < 60) return mins + 'm';
-  const hours = Math.floor(mins / 60);
-  const remainingMins = mins % 60;
-  return hours + 'h ' + remainingMins + 'm';
-}
+import { haptics } from '@/utils/haptics';
+import { EQUIPMENT_LABELS } from '@/constants/Labels';
+import { formatRelativeDate, formatDuration } from '@/utils/dates';
 
 function HistoryCard({
   item,
@@ -58,7 +28,7 @@ function HistoryCard({
   const { details, loading } = useWorkoutDetails(expanded ? item.id : null);
 
   const handleToggle = () => {
-    Haptics.selectionAsync();
+    haptics.selection();
     onToggle();
   };
 
@@ -70,7 +40,7 @@ function HistoryCard({
             {item.templateName}
           </Text>
           <Text style={[styles.date, { color: colors.textSecondary }]}>
-            {formatDate(item.completedAt)}
+            {formatRelativeDate(item.completedAt)}
           </Text>
         </View>
         <View style={[styles.headerRight, { backgroundColor: 'transparent' }]}>

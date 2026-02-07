@@ -3,35 +3,14 @@ import { db } from '@/db';
 import { workoutSessions, setLogs, exercises } from '@/db/schema';
 import { eq, isNull, inArray } from 'drizzle-orm';
 import { useAppState } from '@/hooks/useAppState';
+import type { ActiveSetData, ExerciseSettings, WorkoutExercise } from '@/types';
 
-// ============================================================================
-// Types
-// ============================================================================
+// Re-export types for backward compatibility
+export type { ActiveSetData, ExerciseSettings, WorkoutExercise } from '@/types';
+export type { SetData } from '@/types';
 
-export type WeightUnit = 'kg' | 'lbs';
-
-export type SetData = {
-  id: string;
-  setNumber: number;
-  reps: number | null;
-  weight: number | null;
-  completed: boolean;
-  dbSynced: boolean;
-};
-
-export type ExerciseSettings = {
-  restSecondsOverride: number | null;
-  weightUnitOverride: WeightUnit | null;
-};
-
-export type WorkoutExercise = {
-  id: string;
-  exerciseId: string;
-  name: string;
-  equipment: string;
-  sets: SetData[];
-  settings: ExerciseSettings;
-};
+// ActiveWorkoutContext uses ActiveSetData internally (aliased as SetData for local use)
+type SetData = ActiveSetData;
 
 export type ActiveWorkoutState = {
   sessionId: string;

@@ -1,15 +1,11 @@
 import React from 'react';
 import { Pressable, StyleSheet, ViewStyle, StyleProp } from 'react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-  withSequence,
-} from 'react-native-reanimated';
+import Animated from 'react-native-reanimated';
 import { useColors } from '@/components/Themed';
 import { Radius, Spacing } from '@/constants/Spacing';
 import { Shadows, ShadowStyles } from '@/constants/Shadows';
 import { haptics } from '@/utils/haptics';
+import { usePressScale } from '@/hooks/usePressScale';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -24,25 +20,6 @@ interface CardProps {
   padding?: 'none' | 'sm' | 'md' | 'lg';
 }
 
-// Spring configurations for satisfying press animations
-const SPRING_CONFIGS = {
-  pressIn: {
-    damping: 15,
-    stiffness: 350,
-    mass: 0.8,
-  },
-  pressOut: {
-    damping: 12,
-    stiffness: 180,
-    mass: 0.8,
-  },
-  bounce: {
-    damping: 10,
-    stiffness: 300,
-    mass: 0.6,
-  },
-};
-
 export function Card({
   children,
   variant = 'default',
@@ -52,27 +29,20 @@ export function Card({
   padding = 'md',
 }: CardProps) {
   const colors = useColors();
-  const scale = useSharedValue(1);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
+  const { animatedStyle, handlePressIn: pressIn, handlePressOut: pressOut } = usePressScale({
+    pressedScale: 0.97,
+    overshootScale: 1.01,
+    pressInConfig: { damping: 15, stiffness: 350, mass: 0.8 },
+    bounceConfig: { damping: 10, stiffness: 300, mass: 0.6 },
+    settleConfig: { damping: 12, stiffness: 180, mass: 0.8 },
+  });
 
   const handlePressIn = () => {
-    if (onPress) {
-      // Quick, responsive press down
-      scale.value = withSpring(0.97, SPRING_CONFIGS.pressIn);
-    }
+    if (onPress) pressIn();
   };
 
   const handlePressOut = () => {
-    if (onPress) {
-      // Bounce back with subtle overshoot for satisfying release
-      scale.value = withSequence(
-        withSpring(1.01, SPRING_CONFIGS.bounce),
-        withSpring(1, SPRING_CONFIGS.pressOut)
-      );
-    }
+    if (onPress) pressOut();
   };
 
   const handlePress = () => {

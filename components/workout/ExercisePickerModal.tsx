@@ -5,6 +5,9 @@ import { useAllExercises } from '@/hooks/useWorkoutTemplates';
 import { Ionicons } from '@expo/vector-icons';
 import { Typography } from '@/constants/Typography';
 import { Spacing, Radius } from '@/constants/Spacing';
+import { EQUIPMENT_LABELS } from '@/constants/Labels';
+
+export { EQUIPMENT_LABELS } from '@/constants/Labels';
 
 export const MUSCLE_LABELS: Record<string, string> = {
   chest: 'Chest',
@@ -18,14 +21,6 @@ export const MUSCLE_LABELS: Record<string, string> = {
   glutes: 'Glutes',
   calves: 'Calves',
   core: 'Core',
-};
-
-export const EQUIPMENT_LABELS: Record<string, string> = {
-  barbell: 'Barbell',
-  dumbbell: 'Dumbbell',
-  cable: 'Cable',
-  machine: 'Machine',
-  bodyweight: 'Bodyweight',
 };
 
 type ExercisePickerModalProps = {

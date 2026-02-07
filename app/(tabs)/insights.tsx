@@ -12,7 +12,8 @@ import { desc, isNotNull } from 'drizzle-orm';
 import { Card, Badge } from '@/components/ui';
 import { Typography } from '@/constants/Typography';
 import { Spacing, Radius } from '@/constants/Spacing';
-import * as Haptics from 'expo-haptics';
+import { haptics } from '@/utils/haptics';
+import { EQUIPMENT_LABELS } from '@/constants/Labels';
 
 type FilterMode = 'all' | 'template' | 'session';
 
@@ -67,14 +68,6 @@ const STATUS_LABELS: Record<ProgressStatus, string> = {
   progressing: 'Progressing',
   maintaining: 'Maintaining',
   stalled: 'Stalled',
-};
-
-const EQUIPMENT_LABELS: Record<string, string> = {
-  barbell: 'Barbell',
-  dumbbell: 'Dumbbell',
-  cable: 'Cable',
-  machine: 'Machine',
-  bodyweight: 'Bodyweight',
 };
 
 const MUSCLE_LABELS: Record<string, string> = {
@@ -243,7 +236,7 @@ function MuscleGroupSection({
   const stalledCount = exercises.filter(e => e.status === 'stalled').length;
 
   const handleToggle = () => {
-    Haptics.selectionAsync();
+    haptics.selection();
     onToggle();
   };
 
@@ -369,7 +362,7 @@ function PickerModal<T extends { id: string }>({
                   selectedId === item.id && { backgroundColor: colors.primary + '15' },
                 ]}
                 onPress={() => {
-                  Haptics.selectionAsync();
+                  haptics.selection();
                   onSelect(item.id);
                   onClose();
                 }}
@@ -443,7 +436,7 @@ export default function InsightsScreen() {
   };
 
   const handleFilterModeChange = (mode: FilterMode) => {
-    Haptics.selectionAsync();
+    haptics.selection();
     if (mode === filterMode) {
       if (mode === 'template') setShowTemplatePicker(true);
       else if (mode === 'session') setShowSessionPicker(true);
@@ -548,7 +541,7 @@ export default function InsightsScreen() {
           <Text style={[styles.filterLabelText, { color: colors.textSecondary }]}>{filterLabel}</Text>
           <Pressable
             onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              haptics.tap();
               setFilterMode('all');
               setSelectedTemplateId(null);
               setSelectedSessionId(null);

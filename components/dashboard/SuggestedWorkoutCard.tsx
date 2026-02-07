@@ -6,14 +6,10 @@ import { Typography, TextStyles } from '@/constants/Typography';
 import { Spacing, Radius } from '@/constants/Spacing';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import * as Haptics from 'expo-haptics';
+import { haptics } from '@/utils/haptics';
 import { TemplateWithDetails } from '@/hooks/useWorkoutTemplates';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-  FadeInUp,
-} from 'react-native-reanimated';
+import Animated, { FadeInUp } from 'react-native-reanimated';
+import { usePressScale } from '@/hooks/usePressScale';
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 interface SuggestedWorkoutCardProps {
@@ -25,24 +21,15 @@ interface SuggestedWorkoutCardProps {
 export function SuggestedWorkoutCard({ template, reason, workedOutToday }: SuggestedWorkoutCardProps) {
   const colors = useColors();
   const router = useRouter();
-  const buttonScale = useSharedValue(1);
+  const { animatedStyle: buttonAnimatedStyle, handlePressIn, handlePressOut } = usePressScale({
+    pressedScale: 0.96,
+    bounce: false,
+  });
 
   const handleStartWorkout = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    haptics.press();
     router.push(`/workout/${template.id}`);
   };
-
-  const handlePressIn = () => {
-    buttonScale.value = withSpring(0.96, { damping: 15, stiffness: 400 });
-  };
-
-  const handlePressOut = () => {
-    buttonScale.value = withSpring(1, { damping: 15, stiffness: 400 });
-  };
-
-  const buttonAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: buttonScale.value }],
-  }));
 
   if (workedOutToday) {
     return (

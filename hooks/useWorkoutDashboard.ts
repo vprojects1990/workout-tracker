@@ -3,6 +3,9 @@ import { db } from '@/db';
 import { workoutSessions, workoutTemplates, templateExercises } from '@/db/schema';
 import { eq, desc, gte, isNotNull, and, inArray, sql } from 'drizzle-orm';
 import { TemplateWithDetails } from './useWorkoutTemplates';
+import { getStartOfWeek, getStartOfDay, getDaysSinceDate } from '@/utils/dates';
+
+export { getStartOfWeek, getStartOfDay } from '@/utils/dates';
 
 export interface DashboardData {
   thisWeek: {
@@ -16,29 +19,6 @@ export interface DashboardData {
   } | null;
   hasHistory: boolean;
   workedOutToday: boolean;
-}
-
-export function getStartOfWeek(date: Date): Date {
-  const d = new Date(date);
-  const day = d.getDay();
-  // Adjust so Monday is the start of the week (day 0)
-  const diff = day === 0 ? 6 : day - 1;
-  d.setDate(d.getDate() - diff);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-export function getStartOfDay(date: Date): Date {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-function getDaysSinceDate(date: Date | null): number {
-  if (!date) return Infinity;
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  return Math.floor(diffMs / (1000 * 60 * 60 * 24));
 }
 
 function formatReason(template: TemplateWithDetails, currentDayOfWeek: number): string {

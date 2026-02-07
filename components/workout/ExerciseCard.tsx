@@ -5,17 +5,11 @@ import { Card, SwipeableRow } from '@/components/ui';
 import { Typography, TextStyles } from '@/constants/Typography';
 import { Spacing, Radius } from '@/constants/Spacing';
 import { Ionicons } from '@expo/vector-icons';
-import { SetInput, SetData } from './SetInput';
+import { SetInput } from './SetInput';
+import type { SetData } from '@/types';
 import { WeightUnit } from '@/hooks/useSettings';
+import { EQUIPMENT_LABELS } from '@/constants/Labels';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
-
-const EQUIPMENT_LABELS: Record<string, string> = {
-  barbell: 'Barbell',
-  dumbbell: 'Dumbbell',
-  cable: 'Cable',
-  machine: 'Machine',
-  bodyweight: 'Bodyweight',
-};
 
 // Map muscle groups to colors
 const MUSCLE_COLORS: Record<string, string> = {
