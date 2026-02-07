@@ -1,6 +1,6 @@
 # Frontend Architecture
 
-> Last updated: 2026-02-07 (rev 5)
+> Last updated: 2026-02-07 (rev 6 -- codebase optimization refactoring)
 
 ## Entry Point
 
@@ -70,8 +70,8 @@ The app entry point is `app/_layout.tsx`, which sets up:
 
 | Component | Purpose |
 |-----------|---------|
-| `Button.tsx` | Primary, secondary, and ghost button variants |
-| `Card.tsx` | Container with shadow and rounded corners |
+| `Button.tsx` | Primary, secondary, and ghost button variants (uses `usePressScale` hook) |
+| `Card.tsx` | Container with shadow and rounded corners (uses `usePressScale` hook when pressable) |
 | `Badge.tsx` | Small label/tag component |
 | `Input.tsx` | Text input with label and error states |
 | `ListItem.tsx` | Touchable list row with chevron |
@@ -98,14 +98,7 @@ The app entry point is `app/_layout.tsx`, which sets up:
 | `RestTimer.tsx` | Full-screen and mini rest timer overlay |
 | `WorkoutProgress.tsx` | Progress bar showing completed exercises |
 
-The `ExercisePickerModal` is a shared component used by `create-split.tsx`, `edit-template.tsx`, `[id].tsx`, and `empty.tsx`. It was extracted to eliminate duplication of the search/filter/group-by-muscle logic that was previously inlined in each screen. It exports `MUSCLE_LABELS` and `EQUIPMENT_LABELS` lookup maps.
-
-### History Components (`components/history/`)
-
-| Component | Purpose |
-|-----------|---------|
-| `HistoryCard.tsx` | Workout session summary card |
-| `VolumeChart.tsx` | Volume over time chart |
+The `ExercisePickerModal` is a shared component used by `create-split.tsx`, `edit-template.tsx`, `[id].tsx`, and `empty.tsx`. It was extracted to eliminate duplication of the search/filter/group-by-muscle logic that was previously inlined in each screen. It exports `MUSCLE_LABELS` locally and re-exports `EQUIPMENT_LABELS` from `@/constants/Labels`.
 
 ### Nutrition Components (`components/nutrition/`)
 
@@ -137,6 +130,18 @@ The `ExercisePickerModal` is a shared component used by `create-split.tsx`, `edi
 | `StepIndicator.tsx` | Multi-step progress indicator |
 
 ## Design System
+
+### Labels (`constants/Labels.ts`)
+
+Centralized display-label lookup maps used across multiple components:
+
+```typescript
+EQUIPMENT_LABELS: Record<string, string>
+// barbell → 'Barbell', dumbbell → 'Dumbbell', cable → 'Cable',
+// machine → 'Machine', bodyweight → 'Bodyweight'
+```
+
+Consumed by: `ExerciseCard`, `ExercisePickerModal`, `SuggestedWorkoutCard`, and tab screens.
 
 ### Colors (`constants/Colors.ts`)
 
@@ -228,3 +233,54 @@ The app uses local state with custom hooks for data management:
 - Used for suggested workout quick-start
 - `workout/edit-template?templateId=xxx` accepts template ID as query parameter
 - Used for editing exercises within an existing template from the dashboard
+
+## Shared Types (`types/`)
+
+Centralized TypeScript types extracted from individual modules to eliminate circular dependencies and duplication:
+
+| Type | Purpose | Previously Defined In |
+|------|---------|----------------------|
+| `SetData` | Base set data (setNumber, reps, weight, completed) | `components/workout/SetInput.tsx` |
+| `ActiveSetData` | Extended set with id and dbSynced flag | `contexts/ActiveWorkoutContext.tsx` |
+| `ExerciseSettings` | Per-exercise rest/weight overrides | `contexts/ActiveWorkoutContext.tsx` |
+| `WorkoutExercise` | Full exercise with sets and settings | `contexts/ActiveWorkoutContext.tsx` |
+| `WorkoutHistoryItem` | Completed session summary | `hooks/useWorkoutHistory.ts` |
+| `ExerciseDetail` | Exercise detail within a session | `hooks/useWorkoutHistory.ts` |
+
+All types are exported from `types/index.ts` via barrel export. Consuming modules import from `@/types`.
+
+## Date Utilities (`utils/dates.ts`)
+
+Centralized date formatting and comparison helpers, extracted from inline logic in hooks and tab screens:
+
+| Function | Signature | Purpose |
+|----------|-----------|---------|
+| `formatRelativeDate` | `(date: Date) => string` | "Today", "Yesterday", "Monday", "Jan 15" |
+| `formatLastPerformed` | `(date: Date \| null) => string` | "Today", "3 days ago", "2 weeks ago", "Never" |
+| `formatDuration` | `(seconds: number) => string` | "45m", "1h 30m" |
+| `getStartOfWeek` | `(date: Date) => Date` | Monday 00:00:00 of the given week |
+| `getStartOfDay` | `(date: Date) => Date` | Midnight of the given date |
+| `getDaysSinceDate` | `(date: Date \| null) => number` | Calendar days between date and now (Infinity if null) |
+
+Consumed by: `useWorkoutDashboard`, `useWorkoutHistory`, `history.tsx`, `insights.tsx`, `workout.tsx`.
+
+## Animation Hooks
+
+### `usePressScale` (`hooks/usePressScale.ts`)
+
+Reusable Reanimated press-scale animation hook extracted from duplicated inline animation logic in `Button` and `Card`.
+
+```typescript
+const { animatedStyle, handlePressIn, handlePressOut } = usePressScale({
+  pressedScale: 0.95,    // Scale on press-in (default: 0.95)
+  bounce: true,          // Bounce on release (default: true)
+  overshootScale: 1.02,  // Overshoot on release (default: 1.02)
+  pressInConfig: { damping: 15, stiffness: 400, mass: 0.8 },
+  bounceConfig: { damping: 8, stiffness: 350, mass: 0.6 },
+  settleConfig: { damping: 12, stiffness: 200, mass: 0.8 },
+});
+```
+
+Uses `useSharedValue`, `useAnimatedStyle`, `withSpring`, and `withSequence` from `react-native-reanimated`.
+
+Consumed by: `Button.tsx` (scale 0.95), `Card.tsx` (scale 0.97, only when pressable).

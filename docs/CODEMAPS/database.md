@@ -1,6 +1,6 @@
 # Database Architecture
 
-> Last updated: 2026-02-07 (rev 3)
+> Last updated: 2026-02-07 (rev 4 -- codebase optimization refactoring)
 
 ## Technology
 
@@ -295,29 +295,30 @@ await replaceTemplateExercises(templateId, [
 ]);
 ```
 
-### `useActiveWorkout()`
-Manages live workout session state.
+### `useActiveWorkout()` (via `ActiveWorkoutContext`)
+Live workout session state is managed by `ActiveWorkoutContext` (not a standalone hook). Types (`ActiveSetData`, `ExerciseSettings`, `WorkoutExercise`) are imported from `@/types`.
 
 ```typescript
 const {
-  session,
-  exercises,
-  setLogs,
-  duration,
+  activeWorkout,
+  hasActiveWorkout,
+  startWorkout,
   logSet,
   completeWorkout,
-} = useActiveWorkout(templateId);
+  // ... see ActiveWorkoutContext.tsx for full API
+} = useActiveWorkout();
 ```
 
 ### `useWorkoutHistory()`
-Fetches past workout sessions.
+Fetches past workout sessions. Types (`WorkoutHistoryItem`, `ExerciseDetail`) are imported from and re-exported via `@/types`.
 
 ```typescript
-const { sessions, loading, error, refetch } = useWorkoutHistory();
+const { history, loading, error, refetch } = useWorkoutHistory();
+// Also exports: getSessionExercises(sessionId) for detail drill-down
 ```
 
 ### `useWorkoutDashboard()`
-Dashboard data including streak, weekly stats, suggested workout.
+Dashboard data including streak, weekly stats, suggested workout. Date helpers imported from `@/utils/dates`.
 
 ```typescript
 const { data, loading, error, refetch } = useWorkoutDashboard();

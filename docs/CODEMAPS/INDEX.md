@@ -1,10 +1,10 @@
 # Workout Tracker - Architecture Overview
 
-> Version 0.11.0 | Last updated: 2026-02-07
+> Version 1.0.0 | Last updated: 2026-02-07
 
 ## Project Overview
 
-Workout Tracker is a React Native workout tracking application built with Expo. It provides workout template management (including split exercise editing), live session tracking, progressive overload monitoring, workout history analysis, meal/nutrition tracking, and USDA food search with weight-based macro estimation.
+Workout Tracker is a React Native workout tracking application built with Expo. It provides workout template management (including split exercise editing), live session tracking, progressive overload monitoring, workout history analysis, meal/nutrition tracking, and USDA food search with weight-based macro estimation. The codebase follows a modular architecture with centralized types, date utilities, label constants, and reusable animation hooks.
 
 ## System Architecture
 
@@ -65,18 +65,21 @@ workout-tracker/
 │   ├── settings.tsx             # App settings
 │   └── feedback.tsx             # Bug report / feedback form
 ├── components/                   # Reusable components
-│   ├── ui/                      # Base UI primitives
+│   ├── ui/                      # Base UI primitives (Button, Card use usePressScale)
 │   ├── dashboard/               # Dashboard widgets
 │   ├── workout/                 # Workout session & exercise picker components
-│   ├── history/                 # History list components
 │   ├── nutrition/               # Meal tracking components
 │   ├── animations/              # Animation components
 │   └── wizard/                  # Multi-step form components
-├── constants/                    # Design tokens
+├── constants/                    # Design tokens & label maps
 │   ├── Colors.ts                # Color palette (light/dark)
 │   ├── Typography.ts            # Font styles
 │   ├── Spacing.ts               # Spacing scale
-│   └── Shadows.ts               # Shadow definitions
+│   ├── Shadows.ts               # Shadow definitions
+│   └── Labels.ts                # EQUIPMENT_LABELS lookup map
+├── types/                        # Shared TypeScript types
+│   ├── index.ts                 # Barrel export for all types
+│   └── workout.ts               # SetData, ActiveSetData, WorkoutExercise, etc.
 ├── contexts/                     # React contexts
 │   ├── ActiveWorkoutContext.tsx # Workout persistence & resume
 │   ├── DatabaseContext.tsx      # Database initialization
@@ -88,12 +91,12 @@ workout-tracker/
 │   └── seed.ts                  # Seed data (170+ exercises)
 ├── hooks/                       # Custom React hooks
 │   ├── useWorkoutTemplates.ts   # Template & split management
-│   ├── useActiveWorkout.ts      # Live workout session
-│   ├── useWorkoutHistory.ts     # Past sessions
-│   ├── useWorkoutDashboard.ts   # Dashboard data
+│   ├── useWorkoutHistory.ts     # Past sessions (types from @/types)
+│   ├── useWorkoutDashboard.ts   # Dashboard data (dates from @/utils/dates)
 │   ├── useProgressiveOverload.ts # Progress tracking
 │   ├── useMealTracking.ts       # Meal CRUD, targets & weekly summary
 │   ├── useFoodSearch.ts         # Debounced USDA food search hook
+│   ├── usePressScale.ts         # Reanimated press-scale animation hook
 │   ├── useSettings.ts           # User preferences
 │   ├── useAppState.ts           # App state tracking
 │   └── __tests__/               # Unit tests
@@ -102,6 +105,7 @@ workout-tracker/
 │       └── useWorkoutDashboard.test.ts
 ├── utils/                       # Utility functions
 │   ├── haptics.ts               # Haptic feedback helpers
+│   ├── dates.ts                 # Date formatting & comparison helpers
 │   ├── mealDates.ts             # Weekday date helpers (Mon-Fri)
 │   ├── mealImage.ts             # Meal photo pick/save/delete
 │   ├── foodSearch.ts            # USDA food search, caching & macro estimation
@@ -135,7 +139,7 @@ workout-tracker/
 User selects template
         │
         ▼
-useActiveWorkout() initializes session
+ActiveWorkoutContext initializes session
         │
         ▼
 workoutSessions row created (startedAt)
