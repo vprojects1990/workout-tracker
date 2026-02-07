@@ -90,7 +90,8 @@ export function useActiveWorkout(templateId: string, exercises: TemplateExercise
 
         // Create empty sets based on target
         const sets: SetData[] = [];
-        for (let i = 1; i <= exercise.targetSets; i++) {
+        const numSets = exercise.targetSets ?? 1;
+        for (let i = 1; i <= numSets; i++) {
           sets.push({
             setNumber: i,
             reps: null,

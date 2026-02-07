@@ -38,6 +38,11 @@ function TemplateCard({ template }: { template: TemplateWithDetails }) {
     router.push(`/workout/${template.id}`);
   };
 
+  const handleEdit = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push(`/workout/edit-template?templateId=${template.id}`);
+  };
+
   const dayBadge = template.dayOfWeek !== null ? DAY_ABBREVIATIONS[template.dayOfWeek] : null;
 
   return (
@@ -60,6 +65,13 @@ function TemplateCard({ template }: { template: TemplateWithDetails }) {
           {template.exerciseCount} exercises
         </Text>
       </View>
+      <Pressable
+        onPress={handleEdit}
+        style={styles.editButton}
+        hitSlop={8}
+      >
+        <Ionicons name="pencil-outline" size={18} color={colors.textTertiary} />
+      </Pressable>
       <Text style={[styles.templateLastDone, { color: colors.textTertiary }]}>
         {formatLastPerformed(template.lastPerformed)}
       </Text>
@@ -463,6 +475,10 @@ const styles = StyleSheet.create({
   },
   splitTitleContainer: {
     flex: 1,
+  },
+  editButton: {
+    padding: Spacing.xs,
+    marginRight: Spacing.sm,
   },
   deleteButton: {
     padding: Spacing.sm,

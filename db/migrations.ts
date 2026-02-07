@@ -41,9 +41,9 @@ export async function runMigrations() {
       template_id TEXT NOT NULL REFERENCES workout_templates(id),
       exercise_id TEXT NOT NULL REFERENCES exercises(id),
       order_index INTEGER NOT NULL,
-      target_rep_min INTEGER NOT NULL,
-      target_rep_max INTEGER NOT NULL,
-      target_sets INTEGER NOT NULL
+      target_rep_min INTEGER,
+      target_rep_max INTEGER,
+      target_sets INTEGER
     )
   `);
 
@@ -162,5 +162,44 @@ export async function runMigrations() {
     await db.run(sql`ALTER TABLE workout_templates ADD COLUMN day_of_week INTEGER`);
   } catch (e) {
     // Column already exists, ignore the error
+  }
+
+  // Migration: Make target columns nullable in template_exercises
+  // SQLite doesn't support ALTER COLUMN, so we recreate the table
+  try {
+    // Check if migration is needed by looking for NOT NULL on target_rep_min
+    const tableInfo = await db.all<{ name: string; notnull: number }>(
+      sql`PRAGMA table_info(template_exercises)`
+    );
+    const targetRepMinCol = tableInfo.find(col => col.name === 'target_rep_min');
+    if (targetRepMinCol && targetRepMinCol.notnull === 1) {
+      await db.run(sql`BEGIN TRANSACTION`);
+      try {
+        await db.run(sql`
+          CREATE TABLE template_exercises_new (
+            id TEXT PRIMARY KEY,
+            template_id TEXT NOT NULL REFERENCES workout_templates(id),
+            exercise_id TEXT NOT NULL REFERENCES exercises(id),
+            order_index INTEGER NOT NULL,
+            target_rep_min INTEGER,
+            target_rep_max INTEGER,
+            target_sets INTEGER
+          )
+        `);
+        await db.run(sql`
+          INSERT INTO template_exercises_new
+          SELECT id, template_id, exercise_id, order_index, target_rep_min, target_rep_max, target_sets
+          FROM template_exercises
+        `);
+        await db.run(sql`DROP TABLE template_exercises`);
+        await db.run(sql`ALTER TABLE template_exercises_new RENAME TO template_exercises`);
+        await db.run(sql`COMMIT`);
+      } catch (migrationError) {
+        await db.run(sql`ROLLBACK`);
+        throw migrationError;
+      }
+    }
+  } catch (e) {
+    // Migration already applied or table doesn't exist yet (will be created above)
   }
 }

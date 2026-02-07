@@ -196,9 +196,9 @@ export type TemplateExerciseWithDetails = {
   name: string;
   equipment: string;
   primaryMuscle: string;
-  targetRepMin: number;
-  targetRepMax: number;
-  targetSets: number;
+  targetRepMin: number | null;
+  targetRepMax: number | null;
+  targetSets: number | null;
   orderIndex: number;
 };
 
@@ -207,49 +207,47 @@ export function useTemplateExercises(templateId: string | null) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
-  useEffect(() => {
+  const fetchExercises = useCallback(async () => {
     if (!templateId) {
       setExerciseList([]);
       setLoading(false);
       return;
     }
 
-    const currentTemplateId = templateId;
+    try {
+      setLoading(true);
 
-    async function fetchExercises() {
-      try {
-        setLoading(true);
+      const result = await db
+        .select({
+          id: templateExercises.id,
+          exerciseId: templateExercises.exerciseId,
+          name: exercises.name,
+          equipment: exercises.equipment,
+          primaryMuscle: exercises.primaryMuscle,
+          targetRepMin: templateExercises.targetRepMin,
+          targetRepMax: templateExercises.targetRepMax,
+          targetSets: templateExercises.targetSets,
+          orderIndex: templateExercises.orderIndex,
+        })
+        .from(templateExercises)
+        .innerJoin(exercises, eq(templateExercises.exerciseId, exercises.id))
+        .where(eq(templateExercises.templateId, templateId))
+        .orderBy(templateExercises.orderIndex);
 
-        const result = await db
-          .select({
-            id: templateExercises.id,
-            exerciseId: templateExercises.exerciseId,
-            name: exercises.name,
-            equipment: exercises.equipment,
-            primaryMuscle: exercises.primaryMuscle,
-            targetRepMin: templateExercises.targetRepMin,
-            targetRepMax: templateExercises.targetRepMax,
-            targetSets: templateExercises.targetSets,
-            orderIndex: templateExercises.orderIndex,
-          })
-          .from(templateExercises)
-          .innerJoin(exercises, eq(templateExercises.exerciseId, exercises.id))
-          .where(eq(templateExercises.templateId, currentTemplateId))
-          .orderBy(templateExercises.orderIndex);
-
-        setExerciseList(result);
-        setError(null);
-      } catch (e) {
-        setError(e instanceof Error ? e : new Error('Failed to fetch exercises'));
-      } finally {
-        setLoading(false);
-      }
+      setExerciseList(result);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e : new Error('Failed to fetch exercises'));
+    } finally {
+      setLoading(false);
     }
-
-    fetchExercises();
   }, [templateId]);
 
-  return { exercises: exerciseList, loading, error };
+  useEffect(() => {
+    fetchExercises();
+  }, [fetchExercises]);
+
+  return { exercises: exerciseList, loading, error, refetch: fetchExercises };
 }
 
 // Hook to get all exercises for exercise picker
@@ -296,7 +294,7 @@ export function useAllExercises() {
 export function useWorkoutMutations() {
   // Create a new workout split
   async function createWorkoutSplit(name: string, description?: string): Promise<string> {
-    const id = 'split-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+    const id = 'split-' + Date.now() + '-' + Math.random().toString(36).substring(2, 11);
     await db.insert(workoutSplits).values({
       id,
       name,
@@ -314,7 +312,7 @@ export function useWorkoutMutations() {
     orderIndex: number,
     dayOfWeek?: number
   ): Promise<string> {
-    const id = 'template-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+    const id = 'template-' + Date.now() + '-' + Math.random().toString(36).substring(2, 11);
     await db.insert(workoutTemplates).values({
       id,
       splitId,
@@ -327,16 +325,16 @@ export function useWorkoutMutations() {
     return id;
   }
 
-  // Add exercise to template with rep/set targets
+  // Add exercise to template with optional rep/set targets
   async function addTemplateExercise(
     templateId: string,
     exerciseId: string,
     orderIndex: number,
-    targetSets: number,
-    targetRepMin: number,
-    targetRepMax: number
+    targetSets: number | null = null,
+    targetRepMin: number | null = null,
+    targetRepMax: number | null = null
   ): Promise<void> {
-    const id = 'texercise-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+    const id = 'texercise-' + Date.now() + '-' + Math.random().toString(36).substring(2, 11);
     await db.insert(templateExercises).values({
       id,
       templateId,
@@ -403,9 +401,9 @@ export function useWorkoutMutations() {
 
   type ExerciseInput = {
     exerciseId: string;
-    targetSets: number;
-    targetRepMin: number;
-    targetRepMax: number;
+    targetSets?: number | null;
+    targetRepMin?: number | null;
+    targetRepMax?: number | null;
   };
 
   async function createFullSplit(
@@ -414,7 +412,7 @@ export function useWorkoutMutations() {
     workoutDays: WorkoutDayInput[],
     dayExercises: Map<string, ExerciseInput[]>
   ): Promise<string> {
-    const splitId = 'split-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+    const splitId = 'split-' + Date.now() + '-' + Math.random().toString(36).substring(2, 11);
 
     await db.transaction(async (tx) => {
       // Create the split
@@ -428,7 +426,7 @@ export function useWorkoutMutations() {
       // Create templates for each workout day
       for (let i = 0; i < workoutDays.length; i++) {
         const day = workoutDays[i];
-        const templateId = 'template-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9) + '-' + i;
+        const templateId = 'template-' + Date.now() + '-' + Math.random().toString(36).substring(2, 11) + '-' + i;
 
         await tx.insert(workoutTemplates).values({
           id: templateId,
@@ -444,22 +442,50 @@ export function useWorkoutMutations() {
         const exercisesForDay = dayExercises.get(day.id) || [];
         for (let j = 0; j < exercisesForDay.length; j++) {
           const exercise = exercisesForDay[j];
-          const exerciseTemplateId = 'texercise-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9) + '-' + i + '-' + j;
+          const exerciseTemplateId = 'texercise-' + Date.now() + '-' + Math.random().toString(36).substring(2, 11) + '-' + i + '-' + j;
 
           await tx.insert(templateExercises).values({
             id: exerciseTemplateId,
             templateId,
             exerciseId: exercise.exerciseId,
             orderIndex: j,
-            targetSets: exercise.targetSets,
-            targetRepMin: exercise.targetRepMin,
-            targetRepMax: exercise.targetRepMax,
+            targetSets: exercise.targetSets ?? null,
+            targetRepMin: exercise.targetRepMin ?? null,
+            targetRepMax: exercise.targetRepMax ?? null,
           });
         }
       }
     });
 
     return splitId;
+  }
+
+  // Replace all exercises in a template (batch delete + insert in a transaction)
+  async function replaceTemplateExercises(
+    templateId: string,
+    newExercises: Array<{ exerciseId: string }>
+  ): Promise<void> {
+    await db.transaction(async (tx) => {
+      // Delete all existing exercises for this template
+      await tx
+        .delete(templateExercises)
+        .where(eq(templateExercises.templateId, templateId));
+
+      // Insert new exercises with correct orderIndex
+      for (let i = 0; i < newExercises.length; i++) {
+        const exercise = newExercises[i];
+        const id = 'texercise-' + Date.now() + '-' + Math.random().toString(36).substring(2, 11) + '-' + i;
+        await tx.insert(templateExercises).values({
+          id,
+          templateId,
+          exerciseId: exercise.exerciseId,
+          orderIndex: i,
+          targetSets: null,
+          targetRepMin: null,
+          targetRepMax: null,
+        });
+      }
+    });
   }
 
   return {
@@ -469,5 +495,6 @@ export function useWorkoutMutations() {
     deleteWorkoutSplit,
     deleteWorkoutTemplate,
     createFullSplit,
+    replaceTemplateExercises,
   };
 }

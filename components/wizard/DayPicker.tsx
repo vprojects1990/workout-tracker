@@ -53,7 +53,7 @@ export function DayPicker({ workoutDays, onAddDay, onRemoveDay }: DayPickerProps
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const displayName = `${FULL_DAYS[selectedDayIndex]} - ${trimmedSuffix}`;
     const newDay: WorkoutDay = {
-      id: `day-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      id: `day-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
       dayOfWeek: selectedDayIndex,
       suffix: trimmedSuffix,
       displayName,

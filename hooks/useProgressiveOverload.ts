@@ -17,8 +17,8 @@ export type ExerciseProgress = {
   exerciseName: string;
   equipment: string;
   primaryMuscle: string;
-  targetRepMin: number;
-  targetRepMax: number;
+  targetRepMin: number | null;
+  targetRepMax: number | null;
   currentWeight: number | null;
   lastSessionReps: number[];
   previousSessionReps: number[];
@@ -283,7 +283,7 @@ export function useProgressiveOverload(options?: ProgressiveOverloadOptions) {
         const { status, readyToIncrease } = determineStatus(
           lastSession.reps,
           prevSession?.reps || [],
-          templateEx.targetRepMax,
+          templateEx.targetRepMax ?? 12,
           sessionsAtWeight
         );
 
