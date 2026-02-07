@@ -7,19 +7,13 @@ import {
   TextStyle,
   ActivityIndicator,
 } from 'react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-  withSequence,
-  withTiming,
-  Easing,
-} from 'react-native-reanimated';
+import Animated from 'react-native-reanimated';
 import { useColors } from '@/components/Themed';
 import { Typography } from '@/constants/Typography';
 import { Radius, Layout, Spacing } from '@/constants/Spacing';
 import { Shadows } from '@/constants/Shadows';
 import { haptics } from '@/utils/haptics';
+import { usePressScale } from '@/hooks/usePressScale';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -41,26 +35,6 @@ interface ButtonProps {
   textStyle?: TextStyle;
 }
 
-// Spring configurations for different button variants
-const SPRING_CONFIGS = {
-  pressIn: {
-    damping: 15,
-    stiffness: 400,
-    mass: 0.8,
-  },
-  pressOut: {
-    damping: 12,
-    stiffness: 200,
-    mass: 0.8,
-    overshootClamping: false,
-  },
-  bounce: {
-    damping: 8,
-    stiffness: 350,
-    mass: 0.6,
-  },
-};
-
 export function Button({
   title,
   onPress,
@@ -76,26 +50,10 @@ export function Button({
   textStyle,
 }: ButtonProps) {
   const colors = useColors();
-  const scale = useSharedValue(1);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
-
-  const handlePressIn = () => {
-    // Quick press down with tight spring
-    scale.value = withSpring(0.95, SPRING_CONFIGS.pressIn);
-  };
-
-  const handlePressOut = () => {
-    // Bounce back with overshoot for satisfying release feel
-    scale.value = withSequence(
-      // First overshoot slightly above 1
-      withSpring(1.02, SPRING_CONFIGS.bounce),
-      // Then settle back to 1 with gentle spring
-      withSpring(1, SPRING_CONFIGS.pressOut)
-    );
-  };
+  const { animatedStyle, handlePressIn, handlePressOut } = usePressScale({
+    pressedScale: 0.95,
+    overshootScale: 1.02,
+  });
 
   const handlePress = () => {
     if (disabled || loading) return;

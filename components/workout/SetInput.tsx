@@ -5,7 +5,8 @@ import { Typography, TextStyles } from '@/constants/Typography';
 import { Spacing, Radius } from '@/constants/Spacing';
 import { Ionicons } from '@expo/vector-icons';
 import { WeightUnit, convertWeight } from '@/hooks/useSettings';
-import * as Haptics from 'expo-haptics';
+import type { SetData } from '@/types';
+import { haptics } from '@/utils/haptics';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -13,13 +14,9 @@ import Animated, {
   withSequence,
   FadeIn,
 } from 'react-native-reanimated';
+import { usePressScale } from '@/hooks/usePressScale';
 
-export interface SetData {
-  setNumber: number;
-  reps: number | null;
-  weight: number | null;
-  completed: boolean;
-}
+export type { SetData } from '@/types';
 
 interface SetInputProps {
   set: SetData;
@@ -49,7 +46,10 @@ export function SetInput({
   const [weight, setWeight] = useState('');
 
   const checkScale = useSharedValue(1);
-  const rowScale = useSharedValue(1);
+  const { animatedStyle: rowAnimatedStyle, handlePressIn, handlePressOut } = usePressScale({
+    pressedScale: 0.98,
+    bounce: false,
+  });
 
   const handleComplete = () => {
     const repsNum = parseInt(reps, 10);
@@ -60,24 +60,12 @@ export function SetInput({
         withSpring(1.3, { damping: 8, stiffness: 300 }),
         withSpring(1, { damping: 8, stiffness: 300 })
       );
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      haptics.success();
       onComplete(repsNum, weightNum);
     } else {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      haptics.warning();
     }
   };
-
-  const handlePressIn = () => {
-    rowScale.value = withSpring(0.98, { damping: 15, stiffness: 400 });
-  };
-
-  const handlePressOut = () => {
-    rowScale.value = withSpring(1, { damping: 15, stiffness: 400 });
-  };
-
-  const rowAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: rowScale.value }],
-  }));
 
   const checkAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: checkScale.value }],

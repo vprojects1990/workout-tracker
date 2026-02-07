@@ -11,21 +11,8 @@ import { QuickStatsCard, SuggestedWorkoutCard } from '@/components/dashboard';
 import { Typography } from '@/constants/Typography';
 import { Spacing, Radius, Layout } from '@/constants/Spacing';
 import { Shadows } from '@/constants/Shadows';
-import * as Haptics from 'expo-haptics';
-
-function formatLastPerformed(date: Date | null): string {
-  if (!date) return 'Never';
-
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-  if (diffDays === 0) return 'Today';
-  if (diffDays === 1) return 'Yesterday';
-  if (diffDays < 7) return `${diffDays} days ago`;
-  if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
-  return `${Math.floor(diffDays / 30)} months ago`;
-}
+import { haptics } from '@/utils/haptics';
+import { formatLastPerformed } from '@/utils/dates';
 
 const DAY_ABBREVIATIONS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -34,12 +21,12 @@ function TemplateCard({ template }: { template: TemplateWithDetails }) {
   const colors = useColors();
 
   const handlePress = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    haptics.tap();
     router.push(`/workout/${template.id}`);
   };
 
   const handleEdit = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    haptics.tap();
     router.push(`/workout/edit-template?templateId=${template.id}`);
   };
 
@@ -92,7 +79,7 @@ function SplitContainer({
   const colors = useColors();
 
   const handleDeleteSplit = () => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    haptics.warning();
     Alert.alert(
       'Delete Split',
       `Are you sure you want to delete "${split.name}"? This will also delete all templates and exercises in this split.`,
@@ -104,7 +91,7 @@ function SplitContainer({
   };
 
   const toggleExpanded = () => {
-    Haptics.selectionAsync();
+    haptics.selection();
     setExpanded(!expanded);
   };
 
@@ -221,7 +208,7 @@ export default function WorkoutScreen() {
           <Text style={[styles.title, { color: colors.text }]}>Workouts</Text>
           <Pressable
             onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              haptics.tap();
               router.push('/settings');
             }}
             style={styles.settingsButton}
@@ -239,7 +226,7 @@ export default function WorkoutScreen() {
         <Pressable
           style={[styles.resumeBanner, { backgroundColor: 'rgba(255, 149, 0, 0.10)', borderColor: 'rgba(255, 149, 0, 0.25)' }]}
           onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            haptics.press();
             router.push(`/workout/${activeWorkout.templateId || 'empty'}`);
           }}
         >

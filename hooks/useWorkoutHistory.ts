@@ -2,16 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { db } from '@/db';
 import { workoutSessions, setLogs, exercises } from '@/db/schema';
 import { eq, desc, isNotNull, and, lt, inArray, sql } from 'drizzle-orm';
+import type { WorkoutHistoryItem, ExerciseDetail } from '@/types';
 
-export type WorkoutHistoryItem = {
-  id: string;
-  templateName: string;
-  completedAt: Date;
-  durationSeconds: number;
-  exerciseCount: number;
-  totalSets: number;
-  totalVolume: number;
-};
+export type { WorkoutHistoryItem, ExerciseDetail } from '@/types';
 
 export function useWorkoutHistory() {
   const [history, setHistory] = useState<WorkoutHistoryItem[]>([]);
@@ -82,15 +75,6 @@ export function useWorkoutHistory() {
 
   return { history, loading, error, refetch: fetchHistory };
 }
-
-export type ExerciseDetail = {
-  exerciseId: string;
-  name: string;
-  equipment: string;
-  sets: Array<{ reps: number; weight: number }>;
-  maxWeight: number;
-  isPR: boolean;
-};
 
 export function useWorkoutDetails(sessionId: string | null) {
   const [details, setDetails] = useState<ExerciseDetail[]>([]);
@@ -199,28 +183,6 @@ export function useWorkoutDetails(sessionId: string | null) {
   }, [sessionId]);
 
   return { details, loading, error };
-}
-
-async function getPreviousMaxWeight(exerciseId: string, beforeDate: Date): Promise<number> {
-  try {
-    // Single aggregate query with JOIN - replaces N+1 queries
-    const result = await db
-      .select({
-        maxWeight: sql<number>`MAX(${setLogs.weight})`,
-      })
-      .from(setLogs)
-      .innerJoin(workoutSessions, eq(setLogs.sessionId, workoutSessions.id))
-      .where(
-        and(
-          eq(setLogs.exerciseId, exerciseId),
-          lt(workoutSessions.startedAt, beforeDate)
-        )
-      );
-
-    return result[0]?.maxWeight ?? 0;
-  } catch {
-    return 0;
-  }
 }
 
 // Hook for history mutations
