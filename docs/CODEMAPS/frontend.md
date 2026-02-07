@@ -1,6 +1,6 @@
 # Frontend Architecture
 
-> Last updated: 2026-02-01 (rev 4)
+> Last updated: 2026-02-07 (rev 5)
 
 ## Entry Point
 
@@ -27,6 +27,7 @@ The app entry point is `app/_layout.tsx`, which sets up:
                 <Stack.Screen name="workout/[id]" presentation="modal" />
                 <Stack.Screen name="workout/empty" presentation="modal" />
                 <Stack.Screen name="workout/create-split" presentation="modal" />
+                <Stack.Screen name="workout/edit-template" presentation="modal" />
                 <Stack.Screen name="settings" presentation="modal" />
                 <Stack.Screen name="feedback" presentation="modal" />
               </Stack>
@@ -59,6 +60,7 @@ The app entry point is `app/_layout.tsx`, which sets up:
 | Active Workout | `workout/[id].tsx` | Live workout session with set logging |
 | Empty Workout | `workout/empty.tsx` | Ad-hoc workout without template |
 | Create Split | `workout/create-split.tsx` | Multi-step wizard for creating splits |
+| Edit Template | `workout/edit-template.tsx` | Edit exercises in an existing template (add, remove, reorder) |
 | Settings | `settings.tsx` | User preferences |
 | Feedback | `feedback.tsx` | Bug report / feature request form |
 
@@ -91,9 +93,12 @@ The app entry point is `app/_layout.tsx`, which sets up:
 | Component | Purpose |
 |-----------|---------|
 | `ExerciseCard.tsx` | Exercise display with sets/reps targets |
+| `ExercisePickerModal.tsx` | Shared full-screen modal for searching and selecting exercises by muscle group |
 | `SetInput.tsx` | Weight and reps input for a single set |
 | `RestTimer.tsx` | Full-screen and mini rest timer overlay |
 | `WorkoutProgress.tsx` | Progress bar showing completed exercises |
+
+The `ExercisePickerModal` is a shared component used by `create-split.tsx`, `edit-template.tsx`, `[id].tsx`, and `empty.tsx`. It was extracted to eliminate duplication of the search/filter/group-by-muscle logic that was previously inlined in each screen. It exports `MUSCLE_LABELS` and `EQUIPMENT_LABELS` lookup maps.
 
 ### History Components (`components/history/`)
 
@@ -221,3 +226,5 @@ The app uses local state with custom hooks for data management:
 ### Deep Linking
 - `workout/[id]` accepts template ID as parameter
 - Used for suggested workout quick-start
+- `workout/edit-template?templateId=xxx` accepts template ID as query parameter
+- Used for editing exercises within an existing template from the dashboard

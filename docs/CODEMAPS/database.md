@@ -1,6 +1,6 @@
 # Database Architecture
 
-> Last updated: 2026-02-01 (rev 2)
+> Last updated: 2026-02-07 (rev 3)
 
 ## Technology
 
@@ -46,9 +46,9 @@
 │ templateId (FK)     │◄─────────────┘
 │ exerciseId (FK)     │
 │ orderIndex          │
-│ targetRepMin        │
-│ targetRepMax        │
-│ targetSets          │
+│ targetRepMin?       │  (nullable)
+│ targetRepMax?       │  (nullable)
+│ targetSets?         │  (nullable)
 └─────────────────────┘
 
 ┌─────────────────────┐       ┌─────────────────┐
@@ -139,7 +139,7 @@ Saved workout routines.
 | createdAt | INTEGER | Timestamp |
 
 ### `template_exercises`
-Exercises within a template with rep/set targets.
+Exercises within a template with optional rep/set targets.
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -147,9 +147,9 @@ Exercises within a template with rep/set targets.
 | templateId | TEXT (FK) | Template reference |
 | exerciseId | TEXT (FK) | Exercise reference |
 | orderIndex | INTEGER | Order in template |
-| targetRepMin | INTEGER | Minimum target reps |
-| targetRepMax | INTEGER | Maximum target reps |
-| targetSets | INTEGER | Number of sets |
+| targetRepMin | INTEGER (nullable) | Minimum target reps (null for exercises added via edit-template) |
+| targetRepMax | INTEGER (nullable) | Maximum target reps (null for exercises added via edit-template) |
+| targetSets | INTEGER (nullable) | Number of sets (null for exercises added via edit-template) |
 
 ### `workout_sessions`
 Completed workout sessions.
@@ -256,10 +256,11 @@ const { templates, loading, error, refetch } = useWorkoutTemplates();
 ```
 
 ### `useTemplateExercises(templateId)`
-Fetches exercises for a specific template.
+Fetches exercises for a specific template. Accepts `string | null` to support conditional loading.
 
 ```typescript
-const { exercises, loading, error } = useTemplateExercises(templateId);
+const { exercises, loading, error, refetch } = useTemplateExercises(templateId);
+// exercises: TemplateExerciseWithDetails[] (includes nullable targetRepMin/Max/Sets)
 ```
 
 ### `useAllExercises()`
@@ -276,11 +277,22 @@ CRUD operations for splits and templates.
 const {
   createWorkoutSplit,
   createWorkoutTemplate,
-  addTemplateExercise,
+  addTemplateExercise,          // targetSets/RepMin/RepMax are now optional (nullable)
   deleteWorkoutSplit,
   deleteWorkoutTemplate,
-  createFullSplit,
+  createFullSplit,              // ExerciseInput targets are now optional
+  replaceTemplateExercises,     // Batch replace: DELETE all + INSERT new (transactional)
 } = useWorkoutMutations();
+```
+
+#### `replaceTemplateExercises(templateId, exercises)`
+Replaces all exercises in a template atomically within a transaction. Deletes all existing `template_exercises` rows for the given template and inserts the new list with correct `orderIndex` values. Used by the edit-template screen.
+
+```typescript
+await replaceTemplateExercises(templateId, [
+  { exerciseId: 'exercise-1' },
+  { exerciseId: 'exercise-2' },
+]);
 ```
 
 ### `useActiveWorkout()`
@@ -381,9 +393,12 @@ Database migrations are handled in `db/migrations.ts`. The migration system:
 
 1. Creates tables if they don't exist
 2. Adds new columns for schema updates
-3. Runs on app startup via `DatabaseContext`
+3. Recreates tables when column constraints change (SQLite has no ALTER COLUMN)
+4. Runs on app startup via `DatabaseContext`
 
-Example migration for v0.7.0:
+### Migration History
+
+**v0.7.0** - Splits support:
 ```typescript
 // Add workout_splits table
 await db.run(`CREATE TABLE IF NOT EXISTS workout_splits ...`);
@@ -391,4 +406,16 @@ await db.run(`CREATE TABLE IF NOT EXISTS workout_splits ...`);
 // Add splitId and dayOfWeek columns to workout_templates
 await db.run(`ALTER TABLE workout_templates ADD COLUMN split_id TEXT ...`);
 await db.run(`ALTER TABLE workout_templates ADD COLUMN day_of_week INTEGER ...`);
+```
+
+**v0.11.0** - Nullable target columns:
+```typescript
+// Make target_rep_min, target_rep_max, target_sets nullable in template_exercises
+// SQLite does not support ALTER COLUMN, so the table is recreated:
+// 1. PRAGMA table_info() to check if migration is needed (notnull === 1)
+// 2. CREATE TABLE template_exercises_new (with nullable target columns)
+// 3. INSERT INTO ... SELECT FROM template_exercises (preserve existing data)
+// 4. DROP TABLE template_exercises
+// 5. ALTER TABLE template_exercises_new RENAME TO template_exercises
+// All wrapped in a manual BEGIN/COMMIT transaction with ROLLBACK on error
 ```

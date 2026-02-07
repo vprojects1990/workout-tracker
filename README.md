@@ -26,6 +26,7 @@ A modern, feature-rich workout tracking app built with React Native and Expo. Tr
 ### Workout Management
 - **Workout Splits** - Organize workouts into splits (e.g., "4-Day Upper/Lower", "Push/Pull/Legs")
 - **Workout Templates** - Create and manage custom workout routines with day-of-week scheduling
+- **Edit Template Exercises** - Add, remove, and reorder exercises in existing templates with a dedicated editing screen
 - **Live Workout Tracking** - Real-time session timer with set logging
 - **Rest Timer** - Configurable rest periods with sound notifications
 
@@ -119,7 +120,7 @@ eas build --platform android
 workout-tracker/
 ├── app/                    # App screens (Expo Router)
 │   ├── (tabs)/            # Tab navigation screens (workout, history, insights)
-│   ├── workout/           # Workout modals ([id], empty, create-split)
+│   ├── workout/           # Workout modals ([id], empty, create-split, edit-template)
 │   ├── settings.tsx       # Settings screen
 │   └── feedback.tsx       # Bug report / feature request
 ├── components/            # Reusable components

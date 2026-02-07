@@ -1,10 +1,10 @@
 # Workout Tracker - Architecture Overview
 
-> Version 0.10.0 | Last updated: 2026-02-01
+> Version 0.11.0 | Last updated: 2026-02-07
 
 ## Project Overview
 
-Workout Tracker is a React Native workout tracking application built with Expo. It provides workout template management, live session tracking, progressive overload monitoring, workout history analysis, meal/nutrition tracking, and USDA food search with weight-based macro estimation.
+Workout Tracker is a React Native workout tracking application built with Expo. It provides workout template management (including split exercise editing), live session tracking, progressive overload monitoring, workout history analysis, meal/nutrition tracking, and USDA food search with weight-based macro estimation.
 
 ## System Architecture
 
@@ -60,13 +60,14 @@ workout-tracker/
 │   ├── workout/                 # Workout-related modals
 │   │   ├── [id].tsx             # Active workout session
 │   │   ├── empty.tsx            # Empty workout (no template)
-│   │   └── create-split.tsx     # Create split wizard
+│   │   ├── create-split.tsx     # Create split wizard
+│   │   └── edit-template.tsx    # Edit template exercises
 │   ├── settings.tsx             # App settings
 │   └── feedback.tsx             # Bug report / feedback form
 ├── components/                   # Reusable components
 │   ├── ui/                      # Base UI primitives
 │   ├── dashboard/               # Dashboard widgets
-│   ├── workout/                 # Workout session components
+│   ├── workout/                 # Workout session & exercise picker components
 │   ├── history/                 # History list components
 │   ├── nutrition/               # Meal tracking components
 │   ├── animations/              # Animation components
@@ -182,8 +183,38 @@ Stack Navigator (Root)
     ├── workout/[id]           → Active workout
     ├── workout/empty          → Empty workout
     ├── workout/create-split   → Split wizard
+    ├── workout/edit-template  → Edit template exercises
     ├── settings               → Settings
     └── feedback               → Feedback form
+```
+
+### Template Exercise Editing Flow
+```
+User taps edit icon on TemplateCard (workout.tsx)
+        |
+        v
+router.push('/workout/edit-template?templateId=xxx')
+        |
+        v
+EditTemplateScreen loads:
+  1. useTemplateExercises(templateId) -> fetch current exercises
+  2. db.select(workoutTemplates) -> fetch template name
+        |
+        v
+Local state: editedExercises[] (copy of loaded data)
+  |- Add exercise -> ExercisePickerModal -> append to array
+  |- Remove exercise -> filter from array
+  |- Reorder -> swap indices in array
+        |
+        v
+User taps "Save"
+        |
+        v
+replaceTemplateExercises(templateId, editedExercises)
+  -> Transaction: DELETE all + INSERT all with new orderIndex
+        |
+        v
+router.back() -> Dashboard refetches via useFocusEffect
 ```
 
 ### Food Search Flow
