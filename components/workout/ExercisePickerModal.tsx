@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { StyleSheet, ScrollView, Pressable, TextInput, Modal, KeyboardAvoidingView, Platform } from 'react-native';
+import { useState, useMemo, useCallback } from 'react';
+import { StyleSheet, Pressable, TextInput, Modal, KeyboardAvoidingView, Platform } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { Text, View, useColors } from '@/components/Themed';
 import { useAllExercises } from '@/hooks/useWorkoutTemplates';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,6 +24,10 @@ export const MUSCLE_LABELS: Record<string, string> = {
   core: 'Core',
 };
 
+type SectionHeader = { type: 'header'; muscle: string };
+type ExerciseItem = { type: 'exercise'; id: string; name: string; equipment: string; primaryMuscle: string };
+type ListItem = SectionHeader | ExerciseItem;
+
 type ExercisePickerModalProps = {
   visible: boolean;
   onClose: () => void;
@@ -34,27 +39,61 @@ export function ExercisePickerModal({ visible, onClose, onSelect }: ExercisePick
   const { exercises: allExercises, loading } = useAllExercises();
   const [searchQuery, setSearchQuery] = useState('');
 
-  const filteredExercises = allExercises.filter(ex =>
-    ex.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    ex.primaryMuscle.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const listData = useMemo<ListItem[]>(() => {
+    const filtered = allExercises.filter(ex =>
+      ex.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      ex.primaryMuscle.toLowerCase().includes(searchQuery.toLowerCase())
+    );
 
-  const groupedExercises = filteredExercises.reduce((acc, ex) => {
-    const muscle = ex.primaryMuscle;
-    if (!acc[muscle]) acc[muscle] = [];
-    acc[muscle].push(ex);
-    return acc;
-  }, {} as Record<string, typeof filteredExercises>);
+    const grouped = filtered.reduce((acc, ex) => {
+      const muscle = ex.primaryMuscle;
+      if (!acc[muscle]) acc[muscle] = [];
+      acc[muscle].push(ex);
+      return acc;
+    }, {} as Record<string, typeof filtered>);
+
+    const items: ListItem[] = [];
+    for (const [muscle, exercises] of Object.entries(grouped)) {
+      items.push({ type: 'header', muscle });
+      for (const ex of exercises) {
+        items.push({ type: 'exercise', ...ex });
+      }
+    }
+    return items;
+  }, [allExercises, searchQuery]);
 
   const handleClose = () => {
     setSearchQuery('');
     onClose();
   };
 
-  const handleSelect = (exercise: { id: string; name: string; equipment: string; primaryMuscle: string }) => {
+  const handleSelect = useCallback((exercise: { id: string; name: string; equipment: string; primaryMuscle: string }) => {
     setSearchQuery('');
     onSelect(exercise);
-  };
+  }, [onSelect]);
+
+  const renderItem = useCallback(({ item }: { item: ListItem }) => {
+    if (item.type === 'header') {
+      return (
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.muscleTitle, { color: colors.textTertiary }]}>
+            {MUSCLE_LABELS[item.muscle] || item.muscle}
+          </Text>
+        </View>
+      );
+    }
+    return (
+      <Pressable
+        style={[styles.exerciseItem, { borderBottomColor: colors.separator }]}
+        onPress={() => handleSelect(item)}
+      >
+        <Text style={[styles.exerciseItemName, { color: colors.text }]}>{item.name}</Text>
+        <Text style={[styles.exerciseItemEquipment, { color: colors.textTertiary }]}>
+          {EQUIPMENT_LABELS[item.equipment] || item.equipment}
+        </Text>
+      </Pressable>
+    );
+  }, [colors, handleSelect]);
 
   return (
     <Modal visible={visible} animationType="slide">
@@ -82,31 +121,22 @@ export function ExercisePickerModal({ visible, onClose, onSelect }: ExercisePick
             />
           </View>
 
-          <ScrollView style={styles.exerciseList} keyboardShouldPersistTaps="handled">
-            {loading ? (
-              <Text style={[styles.loadingText, { color: colors.textTertiary }]}>Loading exercises...</Text>
-            ) : (
-              Object.entries(groupedExercises).map(([muscle, muscleExercises]) => (
-                <View key={muscle} style={styles.muscleGroup}>
-                  <Text style={[styles.muscleTitle, { color: colors.textTertiary }]}>
-                    {MUSCLE_LABELS[muscle] || muscle}
-                  </Text>
-                  {muscleExercises.map(ex => (
-                    <Pressable
-                      key={ex.id}
-                      style={[styles.exerciseItem, { borderBottomColor: colors.separator }]}
-                      onPress={() => handleSelect(ex)}
-                    >
-                      <Text style={[styles.exerciseItemName, { color: colors.text }]}>{ex.name}</Text>
-                      <Text style={[styles.exerciseItemEquipment, { color: colors.textTertiary }]}>
-                        {EQUIPMENT_LABELS[ex.equipment] || ex.equipment}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-              ))
-            )}
-          </ScrollView>
+          {loading ? (
+            <Text style={[styles.loadingText, { color: colors.textTertiary }]}>Loading exercises...</Text>
+          ) : (
+            <FlashList
+              data={listData}
+              renderItem={renderItem}
+              getItemType={item => item.type}
+              keyExtractor={item => item.type === 'header' ? `header-${item.muscle}` : item.id}
+              keyboardShouldPersistTaps="handled"
+              ListEmptyComponent={
+                <Text style={[styles.loadingText, { color: colors.textTertiary }]}>
+                  No exercises found
+                </Text>
+              }
+            />
+          )}
         </View>
       </KeyboardAvoidingView>
     </Modal>
@@ -145,17 +175,12 @@ const styles = StyleSheet.create({
     borderRadius: Radius.medium,
     ...Typography.body,
   },
-  exerciseList: {
-    flex: 1,
-  },
   loadingText: {
     textAlign: 'center',
     padding: Spacing.xl,
     ...Typography.body,
   },
-  muscleGroup: {
-    marginBottom: Spacing.lg,
-  },
+  sectionHeader: {},
   muscleTitle: {
     ...Typography.footnote,
     fontWeight: '600',

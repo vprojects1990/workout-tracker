@@ -1,4 +1,5 @@
-import { StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert } from 'react-native';
+import { StyleSheet, Pressable, ActivityIndicator, Alert } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { Text, View, useColors } from '@/components/Themed';
 import { useWorkoutHistory, WorkoutHistoryItem, useWorkoutDetails, useHistoryMutations } from '@/hooks/useWorkoutHistory';
 import { useWorkoutDashboard } from '@/hooks/useWorkoutDashboard';
@@ -116,20 +117,20 @@ export default function HistoryScreen() {
     }, [refetch])
   );
 
-  const toggleExpanded = (id: string) => {
+  const toggleExpanded = useCallback((id: string) => {
     setExpandedId(prev => (prev === id ? null : id));
-  };
+  }, []);
 
-  const handleDeleteSession = async (sessionId: string) => {
+  const handleDeleteSession = useCallback(async (sessionId: string) => {
     try {
       await deleteWorkoutSession(sessionId);
       refetch();
       refetchDashboard();
     } catch (e) {
       Alert.alert('Error', 'Failed to delete workout. Please try again.');
-      console.error('Error deleting session:', e);
+      if (__DEV__) console.error('Error deleting session:', e);
     }
-  };
+  }, [deleteWorkoutSession, refetch, refetchDashboard]);
 
   if (loading) {
     return (
@@ -149,46 +150,46 @@ export default function HistoryScreen() {
     );
   }
 
-  return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: colors.background }]}
-      contentContainerStyle={styles.contentContainer}
-    >
-      <View style={[styles.header, { backgroundColor: 'transparent' }]}>
-        <Text style={[styles.title, { color: colors.text }]}>History</Text>
-        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          Your past workouts
-        </Text>
-      </View>
+  const renderHistoryItem = useCallback(({ item }: { item: WorkoutHistoryItem }) => (
+    <SwipeableRow onDelete={() => handleDeleteSession(item.id)}>
+      <HistoryCard
+        item={item}
+        weightUnit={settings.weightUnit}
+        expanded={expandedId === item.id}
+        onToggle={() => toggleExpanded(item.id)}
+      />
+    </SwipeableRow>
+  ), [expandedId, settings.weightUnit, handleDeleteSession, toggleExpanded]);
 
-      {history.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Ionicons name="time-outline" size={48} color={colors.textTertiary} />
-          <Text style={[styles.emptyText, { color: colors.text }]}>
-            No workouts yet
-          </Text>
-          <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>
-            Complete a workout to see it here
-          </Text>
-        </View>
-      ) : (
-        <View style={styles.historyList}>
-          {history.map(item => (
-            <SwipeableRow
-              key={item.id}
-              onDelete={() => handleDeleteSession(item.id)}
-            >
-              <HistoryCard
-                item={item}
-                weightUnit={settings.weightUnit}
-                expanded={expandedId === item.id}
-                onToggle={() => toggleExpanded(item.id)}
-              />
-            </SwipeableRow>
-          ))}
-        </View>
-      )}
-    </ScrollView>
+  return (
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <FlashList
+        data={history}
+        renderItem={renderHistoryItem}
+        keyExtractor={item => item.id}
+        extraData={expandedId}
+        contentContainerStyle={styles.listContentContainer}
+        ListHeaderComponent={
+          <View style={[styles.header, { backgroundColor: 'transparent' }]}>
+            <Text style={[styles.title, { color: colors.text }]}>History</Text>
+            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+              Your past workouts
+            </Text>
+          </View>
+        }
+        ListEmptyComponent={
+          <View style={styles.emptyState}>
+            <Ionicons name="time-outline" size={48} color={colors.textTertiary} />
+            <Text style={[styles.emptyText, { color: colors.text }]}>
+              No workouts yet
+            </Text>
+            <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>
+              Complete a workout to see it here
+            </Text>
+          </View>
+        }
+      />
+    </View>
   );
 }
 
@@ -196,8 +197,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  contentContainer: {
+  listContentContainer: {
     paddingBottom: Spacing.xxxl,
+    paddingHorizontal: Spacing.xl,
   },
   loadingContainer: {
     flex: 1,
@@ -236,9 +238,6 @@ const styles = StyleSheet.create({
   emptySubtext: {
     ...Typography.subhead,
     marginTop: Spacing.sm,
-  },
-  historyList: {
-    paddingHorizontal: Spacing.xl,
   },
   historyCard: {
     // No marginBottom - SwipeableRow handles spacing
