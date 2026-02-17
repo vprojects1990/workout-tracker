@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { db } from '@/db';
-import { exercises, setLogs, workoutSessions, templateExercises } from '@/db/schema';
+import { setLogs, workoutSessions, templateExercises } from '@/db/schema';
 import { eq, desc, isNotNull, and, inArray } from 'drizzle-orm';
+import { fetchExercisesByIds } from '@/db/queries';
 
 export type ProgressStatus = 'progressing' | 'maintaining' | 'stalled';
 
@@ -102,12 +103,8 @@ export function useProgressiveOverload(options?: ProgressiveOverloadOptions) {
         return;
       }
 
-      // Batch query: Get all exercise details in one query
-      const exerciseDetailsList = await db
-        .select()
-        .from(exercises)
-        .where(inArray(exercises.id, exerciseIds));
-
+      // Batch query: Get all exercise details
+      const exerciseDetailsList = fetchExercisesByIds(exerciseIds);
       const exerciseMap = new Map(exerciseDetailsList.map(e => [e.id, e]));
 
       // Fetch sessions once (same for all exercises based on options)

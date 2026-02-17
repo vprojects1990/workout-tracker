@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { db } from '@/db';
-import { workoutSessions, workoutTemplates, templateExercises } from '@/db/schema';
-import { eq, desc, gte, isNotNull, and, inArray, sql } from 'drizzle-orm';
+import { workoutSessions, workoutTemplates } from '@/db/schema';
+import { desc, gte, isNotNull, and } from 'drizzle-orm';
 import { TemplateWithDetails } from './useWorkoutTemplates';
 import { getStartOfWeek, getStartOfDay, getDaysSinceDate } from '@/utils/dates';
+import { fetchTemplateDetails } from '@/db/queries';
 
 export { getStartOfWeek, getStartOfDay } from '@/utils/dates';
 
@@ -131,33 +132,8 @@ export function useWorkoutDashboard() {
       if (allTemplates.length > 0) {
         const templateIds = allTemplates.map(t => t.id);
 
-        // Batch query 1: Get exercise counts per template
-        const exerciseCountResults = await db
-          .select({
-            templateId: templateExercises.templateId,
-            count: sql<number>`COUNT(*)`,
-          })
-          .from(templateExercises)
-          .where(inArray(templateExercises.templateId, templateIds))
-          .groupBy(templateExercises.templateId);
-
-        const exerciseCounts = new Map(exerciseCountResults.map(r => [r.templateId, r.count]));
-
-        // Batch query 2: Get last session per template
-        const lastSessions = await db
-          .select({
-            templateId: workoutSessions.templateId,
-            completedAt: sql<number>`MAX(${workoutSessions.completedAt})`,
-          })
-          .from(workoutSessions)
-          .where(inArray(workoutSessions.templateId, templateIds))
-          .groupBy(workoutSessions.templateId);
-
-        // Convert raw timestamps (seconds) to Date objects (sql aggregates return raw values)
-        const lastPerformed = new Map(lastSessions.map(s => [
-          s.templateId!,
-          s.completedAt ? new Date(s.completedAt * 1000) : null
-        ]));
+        // Use shared query for exercise counts and last performed dates
+        const { exerciseCounts, lastPerformed } = fetchTemplateDetails(templateIds);
 
         // Build templates with details using the batch results
         const templatesWithDetails: TemplateWithDetails[] = allTemplates.map(template => ({

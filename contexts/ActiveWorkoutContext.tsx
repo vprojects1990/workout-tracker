@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { db } from '@/db';
-import { workoutSessions, setLogs, exercises } from '@/db/schema';
-import { eq, isNull, inArray } from 'drizzle-orm';
+import { workoutSessions, setLogs } from '@/db/schema';
+import { eq, isNull } from 'drizzle-orm';
+import { fetchExercisesByIds } from '@/db/queries';
 import { useAppState } from '@/hooks/useAppState';
 import type { ActiveSetData, ExerciseSettings, WorkoutExercise } from '@/types';
 
@@ -529,10 +530,7 @@ async function rebuildExerciseState(
 
   const exerciseIds = Object.keys(setsByExercise);
 
-  const exerciseDetails = await db
-    .select()
-    .from(exercises)
-    .where(inArray(exercises.id, exerciseIds));
+  const exerciseDetails = fetchExercisesByIds(exerciseIds);
 
   const result: WorkoutExercise[] = [];
 
