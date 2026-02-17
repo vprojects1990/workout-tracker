@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { db } from '@/db';
-import { workoutSessions, setLogs, exercises } from '@/db/schema';
-import { eq, desc, isNotNull, and, lt, inArray, sql } from 'drizzle-orm';
+import { workoutSessions, setLogs } from '@/db/schema';
+import { eq, desc, isNotNull } from 'drizzle-orm';
 import type { WorkoutHistoryItem, ExerciseDetail } from '@/types';
+import { fetchSessionSetStats, fetchExercisesByIds, fetchPreviousMaxWeights } from '@/db/queries';
 
 export type { WorkoutHistoryItem, ExerciseDetail } from '@/types';
 
@@ -28,21 +29,9 @@ export function useWorkoutHistory() {
         return;
       }
 
-      // Batch query: Get aggregated set data for all sessions in one query
+      // Batch query: Get aggregated set data for all sessions
       const sessionIds = sessions.map(s => s.id);
-      const setStats = await db
-        .select({
-          sessionId: setLogs.sessionId,
-          exerciseCount: sql<number>`COUNT(DISTINCT ${setLogs.exerciseId})`,
-          totalSets: sql<number>`COUNT(*)`,
-          totalVolume: sql<number>`COALESCE(SUM(${setLogs.weight} * ${setLogs.reps}), 0)`,
-        })
-        .from(setLogs)
-        .where(inArray(setLogs.sessionId, sessionIds))
-        .groupBy(setLogs.sessionId);
-
-      // Create a lookup map for O(1) access
-      const statsMap = new Map(setStats.map(s => [s.sessionId, s]));
+      const statsMap = fetchSessionSetStats(sessionIds);
 
       // Build history items without additional queries
       const historyItems: WorkoutHistoryItem[] = sessions
@@ -126,31 +115,12 @@ export function useWorkoutDetails(sessionId: string | null) {
           return;
         }
 
-        // Batch query: Get all exercise details in one query
-        const exerciseData = await db
-          .select()
-          .from(exercises)
-          .where(inArray(exercises.id, exerciseIds));
-
+        // Batch query: Get all exercise details
+        const exerciseData = fetchExercisesByIds(exerciseIds);
         const exerciseMap = new Map(exerciseData.map(e => [e.id, e]));
 
-        // Batch query: Get previous max weights for all exercises in one query
-        const previousMaxWeights = await db
-          .select({
-            exerciseId: setLogs.exerciseId,
-            maxWeight: sql<number>`MAX(${setLogs.weight})`,
-          })
-          .from(setLogs)
-          .innerJoin(workoutSessions, eq(setLogs.sessionId, workoutSessions.id))
-          .where(
-            and(
-              inArray(setLogs.exerciseId, exerciseIds),
-              lt(workoutSessions.startedAt, session.startedAt)
-            )
-          )
-          .groupBy(setLogs.exerciseId);
-
-        const previousMaxMap = new Map(previousMaxWeights.map(p => [p.exerciseId, p.maxWeight]));
+        // Batch query: Get previous max weights for PR detection
+        const previousMaxMap = fetchPreviousMaxWeights(exerciseIds, session.startedAt);
 
         // Build exercise details without additional queries
         const exerciseDetails: ExerciseDetail[] = exerciseIds.map(exerciseId => {

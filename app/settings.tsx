@@ -1,4 +1,6 @@
-import { StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
+import { StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert } from 'react-native';
+import { useState } from 'react';
+import { exportData } from '@/utils/exportData';
 import { Text, View, useColors } from '@/components/Themed';
 import { useSettings, WeightUnit } from '@/hooks/useSettings';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -28,6 +30,19 @@ export default function SettingsScreen() {
     updateDefaultRestSeconds,
   } = useSettings();
   const { theme, setTheme } = useTheme();
+  const [exporting, setExporting] = useState(false);
+
+  const handleExport = async () => {
+    try {
+      setExporting(true);
+      await exportData();
+    } catch (e) {
+      Alert.alert('Export Failed', 'Something went wrong while exporting your data. Please try again.');
+      if (__DEV__) console.error('Export error:', e);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -123,6 +138,28 @@ export default function SettingsScreen() {
               style={styles.segmentedControl}
             />
           </Card>
+        </View>
+
+        {/* Data Section */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+            DATA
+          </Text>
+          <Pressable onPress={handleExport} disabled={exporting}>
+            <Card variant="filled" style={styles.card}>
+              <View style={styles.feedbackRow}>
+                <Ionicons name="download-outline" size={20} color={colors.primary} />
+                <Text style={[styles.feedbackText, { color: colors.text }]}>
+                  Export Data
+                </Text>
+                {exporting ? (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                ) : (
+                  <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
+                )}
+              </View>
+            </Card>
+          </Pressable>
         </View>
 
         {/* Support Section */}

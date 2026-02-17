@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { db } from '@/db';
-import { workoutTemplates, templateExercises, exercises, workoutSessions, workoutSplits } from '@/db/schema';
-import { eq, desc, isNull, inArray, sql } from 'drizzle-orm';
+import { workoutTemplates, templateExercises, exercises, workoutSplits } from '@/db/schema';
+import { eq, inArray } from 'drizzle-orm';
+import { fetchTemplateDetails, fetchTemplateExercisesWithDetails } from '@/db/queries';
 
 export type TemplateWithDetails = {
   id: string;
@@ -22,47 +23,6 @@ export type SplitWithTemplates = {
 
 // Helper type for internal use with splitId
 type TemplateWithSplitId = TemplateWithDetails & { splitId: string | null };
-
-// Batch helper: Get exercise counts and last performed dates for all templates
-async function fetchTemplateDetails(templateIds: string[]): Promise<{
-  exerciseCounts: Map<string, number>;
-  lastPerformed: Map<string, Date | null>;
-}> {
-  if (templateIds.length === 0) {
-    return { exerciseCounts: new Map(), lastPerformed: new Map() };
-  }
-
-  // Batch query 1: Get exercise counts per template
-  const exerciseCountResults = await db
-    .select({
-      templateId: templateExercises.templateId,
-      count: sql<number>`COUNT(*)`,
-    })
-    .from(templateExercises)
-    .where(inArray(templateExercises.templateId, templateIds))
-    .groupBy(templateExercises.templateId);
-
-  const exerciseCounts = new Map(exerciseCountResults.map(r => [r.templateId, r.count]));
-
-  // Batch query 2: Get last session per template using a subquery approach
-  // We get all completed sessions for these templates, ordered by completedAt
-  const lastSessions = await db
-    .select({
-      templateId: workoutSessions.templateId,
-      completedAt: sql<number>`MAX(${workoutSessions.completedAt})`,
-    })
-    .from(workoutSessions)
-    .where(inArray(workoutSessions.templateId, templateIds))
-    .groupBy(workoutSessions.templateId);
-
-  // Convert raw timestamps (seconds) to Date objects (sql aggregates return raw values)
-  const lastPerformed = new Map(lastSessions.map(s => [
-    s.templateId!,
-    s.completedAt ? new Date(s.completedAt * 1000) : null
-  ]));
-
-  return { exerciseCounts, lastPerformed };
-}
 
 export function useWorkoutSplits() {
   const [splits, setSplits] = useState<SplitWithTemplates[]>([]);
@@ -94,7 +54,7 @@ export function useWorkoutSplits() {
 
       // Batch fetch template details (exercise counts and last performed)
       const templateIds = allTemplates.map(t => t.id);
-      const { exerciseCounts, lastPerformed } = await fetchTemplateDetails(templateIds);
+      const { exerciseCounts, lastPerformed } = fetchTemplateDetails(templateIds);
 
       // Build templates with details using the batch results
       const templatesWithDetails: TemplateWithSplitId[] = allTemplates.map(template => ({
@@ -161,7 +121,7 @@ export function useWorkoutTemplates() {
 
       // Batch fetch template details (exercise counts and last performed)
       const templateIds = allTemplates.map(t => t.id);
-      const { exerciseCounts, lastPerformed } = await fetchTemplateDetails(templateIds);
+      const { exerciseCounts, lastPerformed } = fetchTemplateDetails(templateIds);
 
       // Build templates with details using the batch results
       const templatesWithDetails: TemplateWithDetails[] = allTemplates.map(template => ({
@@ -207,7 +167,7 @@ export function useTemplateExercises(templateId: string | null) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
-  const fetchExercises = useCallback(async () => {
+  const fetchExercises = useCallback(() => {
     if (!templateId) {
       setExerciseList([]);
       setLoading(false);
@@ -216,24 +176,7 @@ export function useTemplateExercises(templateId: string | null) {
 
     try {
       setLoading(true);
-
-      const result = await db
-        .select({
-          id: templateExercises.id,
-          exerciseId: templateExercises.exerciseId,
-          name: exercises.name,
-          equipment: exercises.equipment,
-          primaryMuscle: exercises.primaryMuscle,
-          targetRepMin: templateExercises.targetRepMin,
-          targetRepMax: templateExercises.targetRepMax,
-          targetSets: templateExercises.targetSets,
-          orderIndex: templateExercises.orderIndex,
-        })
-        .from(templateExercises)
-        .innerJoin(exercises, eq(templateExercises.exerciseId, exercises.id))
-        .where(eq(templateExercises.templateId, templateId))
-        .orderBy(templateExercises.orderIndex);
-
+      const result = fetchTemplateExercisesWithDetails(templateId);
       setExerciseList(result);
       setError(null);
     } catch (e) {
