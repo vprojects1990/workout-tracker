@@ -132,6 +132,17 @@ export default function HistoryScreen() {
     }
   }, [deleteWorkoutSession, refetch, refetchDashboard]);
 
+  const renderHistoryItem = useCallback(({ item }: { item: WorkoutHistoryItem }) => (
+    <SwipeableRow onDelete={() => handleDeleteSession(item.id)}>
+      <HistoryCard
+        item={item}
+        weightUnit={settings.weightUnit}
+        expanded={expandedId === item.id}
+        onToggle={() => toggleExpanded(item.id)}
+      />
+    </SwipeableRow>
+  ), [expandedId, settings.weightUnit, handleDeleteSession, toggleExpanded]);
+
   if (loading) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
@@ -143,23 +154,12 @@ export default function HistoryScreen() {
   if (error) {
     return (
       <View style={[styles.errorContainer, { backgroundColor: colors.background }]}>
-        <Text style={[styles.errorText, { color: colors.error }]}>
-          Error: {error.message}
+        <Text style={[styles.errorText, { color: colors.text }]}>
+          Failed to load history
         </Text>
       </View>
     );
   }
-
-  const renderHistoryItem = useCallback(({ item }: { item: WorkoutHistoryItem }) => (
-    <SwipeableRow onDelete={() => handleDeleteSession(item.id)}>
-      <HistoryCard
-        item={item}
-        weightUnit={settings.weightUnit}
-        expanded={expandedId === item.id}
-        onToggle={() => toggleExpanded(item.id)}
-      />
-    </SwipeableRow>
-  ), [expandedId, settings.weightUnit, handleDeleteSession, toggleExpanded]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
