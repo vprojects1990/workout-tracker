@@ -1,6 +1,6 @@
 # Database Architecture
 
-> Last updated: 2026-02-07 (rev 4 -- codebase optimization refactoring)
+> Last updated: 2026-02-18 (rev 5 -- shared query layer, FlashList migration, data export)
 
 ## Technology
 
@@ -235,10 +235,68 @@ Maps search queries to cached food result IDs. Enables offline-first search.
 | fdcIds | TEXT | JSON array of fdcId integers (preserves order) |
 | cachedAt | INTEGER | Cache timestamp (ms) |
 
+## Shared Query Layer (`db/queries.ts`)
+
+Centralized database query functions extracted from hooks to eliminate duplication and enable batch fetching. All functions are synchronous (using expo-sqlite's sync driver) and return typed results.
+
+### `fetchTemplateDetails(templateIds: string[])`
+
+Batch-fetches exercise counts and last-performed dates for multiple templates in two aggregate queries.
+
+```typescript
+const { exerciseCounts, lastPerformed } = fetchTemplateDetails(templateIds);
+// exerciseCounts: Map<string, number>
+// lastPerformed: Map<string, Date | null>
+```
+
+**Consumers:** `useWorkoutSplits`, `useWorkoutTemplates`, `useWorkoutDashboard`
+
+### `fetchTemplateExercisesWithDetails(templateId: string)`
+
+Fetches template exercises with joined exercise details (name, equipment, primaryMuscle) for a single template.
+
+```typescript
+const exercises = fetchTemplateExercisesWithDetails(templateId);
+// Returns: { id, exerciseId, name, equipment, primaryMuscle, targetRepMin, targetRepMax, targetSets, orderIndex }[]
+```
+
+**Consumers:** `useTemplateExercises`
+
+### `fetchExercisesByIds(exerciseIds: string[])`
+
+Batch-fetches full exercise records by ID array.
+
+```typescript
+const exercises: Exercise[] = fetchExercisesByIds(exerciseIds);
+```
+
+**Consumers:** `useWorkoutDetails` (history), `ActiveWorkoutContext` (resume), `useProgressiveOverload`
+
+### `fetchSessionSetStats(sessionIds: string[])`
+
+Batch-fetches aggregated stats (exercise count, total sets, total volume) for multiple sessions in a single query.
+
+```typescript
+const statsMap: Map<string, SessionStats> = fetchSessionSetStats(sessionIds);
+// SessionStats: { exerciseCount: number, totalSets: number, totalVolume: number }
+```
+
+**Consumers:** `useWorkoutHistory`
+
+### `fetchPreviousMaxWeights(exerciseIds: string[], beforeDate: Date)`
+
+Batch-fetches the maximum weight ever lifted for each exercise before a given date. Used for PR detection in workout history detail view.
+
+```typescript
+const maxWeights: Map<string, number> = fetchPreviousMaxWeights(exerciseIds, beforeDate);
+```
+
+**Consumers:** `useWorkoutDetails`
+
 ## Custom Hooks
 
 ### `useWorkoutSplits()`
-Fetches all splits with their templates.
+Fetches all splits with their templates. Uses `fetchTemplateDetails()` from `db/queries` for batch exercise count and last-performed lookups.
 
 ```typescript
 const { splits, standaloneTemplates, loading, error, refetch } = useWorkoutSplits();
@@ -249,14 +307,14 @@ Returns:
 - `standaloneTemplates`: Templates without a split
 
 ### `useWorkoutTemplates()`
-Fetches all templates (flat list).
+Fetches all templates (flat list). Uses `fetchTemplateDetails()` from `db/queries` for batch exercise count and last-performed lookups.
 
 ```typescript
 const { templates, loading, error, refetch } = useWorkoutTemplates();
 ```
 
 ### `useTemplateExercises(templateId)`
-Fetches exercises for a specific template. Accepts `string | null` to support conditional loading.
+Fetches exercises for a specific template. Accepts `string | null` to support conditional loading. Uses `fetchTemplateExercisesWithDetails()` from `db/queries`.
 
 ```typescript
 const { exercises, loading, error, refetch } = useTemplateExercises(templateId);
@@ -296,7 +354,7 @@ await replaceTemplateExercises(templateId, [
 ```
 
 ### `useActiveWorkout()` (via `ActiveWorkoutContext`)
-Live workout session state is managed by `ActiveWorkoutContext` (not a standalone hook). Types (`ActiveSetData`, `ExerciseSettings`, `WorkoutExercise`) are imported from `@/types`.
+Live workout session state is managed by `ActiveWorkoutContext` (not a standalone hook). Types (`ActiveSetData`, `ExerciseSettings`, `WorkoutExercise`) are imported from `@/types`. Uses `fetchExercisesByIds()` from `db/queries` for workout resume/rebuild.
 
 ```typescript
 const {
@@ -310,26 +368,28 @@ const {
 ```
 
 ### `useWorkoutHistory()`
-Fetches past workout sessions. Types (`WorkoutHistoryItem`, `ExerciseDetail`) are imported from and re-exported via `@/types`.
+Fetches past workout sessions. Types (`WorkoutHistoryItem`, `ExerciseDetail`) are imported from and re-exported via `@/types`. Uses `fetchSessionSetStats()` from `db/queries` for batch aggregation. The companion `useWorkoutDetails()` hook uses `fetchExercisesByIds()` and `fetchPreviousMaxWeights()` for PR detection.
 
 ```typescript
 const { history, loading, error, refetch } = useWorkoutHistory();
-// Also exports: getSessionExercises(sessionId) for detail drill-down
+// Also exports: useWorkoutDetails(sessionId) for detail drill-down
+// Also exports: useHistoryMutations() for session deletion
 ```
 
 ### `useWorkoutDashboard()`
-Dashboard data including streak, weekly stats, suggested workout. Date helpers imported from `@/utils/dates`.
+Dashboard data including streak, weekly stats, suggested workout. Date helpers imported from `@/utils/dates`. Uses `fetchTemplateDetails()` from `db/queries` for suggested workout ranking.
 
 ```typescript
 const { data, loading, error, refetch } = useWorkoutDashboard();
 // data.thisWeek.streak, data.suggestedWorkout, etc.
 ```
 
-### `useProgressiveOverload(exerciseId)`
-Progress tracking and stall detection.
+### `useProgressiveOverload(options?)`
+Progress tracking and stall detection. Uses `fetchExercisesByIds()` from `db/queries` for batch exercise lookup. Accepts optional `sessionId` or `templateId` to filter scope.
 
 ```typescript
-const { progress, trend, suggestion } = useProgressiveOverload(exerciseId);
+const { exerciseProgress, loading, error, refetch } = useProgressiveOverload(options);
+// options?: { sessionId?: string, templateId?: string }
 ```
 
 ### `useMealTracking(selectedDate, weekOffset)`

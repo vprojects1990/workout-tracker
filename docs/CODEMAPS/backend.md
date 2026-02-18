@@ -1,6 +1,6 @@
 # Backend Architecture
 
-> Last updated: 2026-02-07 (no changes in optimization refactoring)
+> Last updated: 2026-02-18 (added client-side data export documentation)
 
 ## Overview
 
@@ -197,9 +197,25 @@ The mobile app calls the USDA API directly (no backend proxy) for food nutrient 
 
 **Note:** `app.json` was replaced by `app.config.ts` to support environment-based configuration.
 
+## Client-side Data Export
+
+The app supports exporting all user data to a JSON file directly on-device (no server involved).
+
+| Detail | Value |
+|--------|-------|
+| Trigger | Settings screen > "Export Data" |
+| Implementation | `utils/exportData.ts` |
+| File format | JSON (`gymtrack-export-YYYY-MM-DD.json`) |
+| Dependencies | `expo-file-system` (File/Paths API), `expo-sharing` |
+| Temp storage | Cache directory (cleaned up after sharing) |
+| Export version | 1 (included in payload for future import compatibility) |
+
+**Exported tables:** `workoutSplits`, `workoutTemplates`, `templateExercises`, `exercises` (custom only), `workoutSessions`, `setLogs`, `mealTargets`, `mealLogs`, `userSettings`
+
 ## Future Considerations
 
 - **Rate Limiting**: Add custom rate limiting if abuse occurs
 - **Authentication**: Add app-specific API key for security
 - **Analytics**: Track feedback submission counts
 - **Image Upload**: Direct image upload to cloud storage
+- **Data Import**: Restore from exported JSON files

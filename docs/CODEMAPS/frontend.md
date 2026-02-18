@@ -1,6 +1,6 @@
 # Frontend Architecture
 
-> Last updated: 2026-02-07 (rev 6 -- codebase optimization refactoring)
+> Last updated: 2026-02-18 (rev 7 -- shared queries, FlashList migration, data export)
 
 ## Entry Point
 
@@ -49,7 +49,7 @@ The app entry point is `app/_layout.tsx`, which sets up:
 | Screen | File | Purpose |
 |--------|------|---------|
 | Workout | `workout.tsx` | Dashboard with splits, templates, suggested workout |
-| History | `history.tsx` | List of completed workout sessions |
+| History | `history.tsx` | List of completed workout sessions (FlashList) |
 | Nutrition | `nutrition.tsx` | Meal logging, macro tracking, weekly adherence |
 | Insights | `insights.tsx` | Progress analytics and statistics |
 
@@ -61,7 +61,7 @@ The app entry point is `app/_layout.tsx`, which sets up:
 | Empty Workout | `workout/empty.tsx` | Ad-hoc workout without template |
 | Create Split | `workout/create-split.tsx` | Multi-step wizard for creating splits |
 | Edit Template | `workout/edit-template.tsx` | Edit exercises in an existing template (add, remove, reorder) |
-| Settings | `settings.tsx` | User preferences |
+| Settings | `settings.tsx` | User preferences and data export |
 | Feedback | `feedback.tsx` | Bug report / feature request form |
 
 ## Component Library
@@ -93,12 +93,23 @@ The app entry point is `app/_layout.tsx`, which sets up:
 | Component | Purpose |
 |-----------|---------|
 | `ExerciseCard.tsx` | Exercise display with sets/reps targets |
-| `ExercisePickerModal.tsx` | Shared full-screen modal for searching and selecting exercises by muscle group |
+| `ExercisePickerModal.tsx` | Shared full-screen modal for searching and selecting exercises by muscle group (FlashList) |
 | `SetInput.tsx` | Weight and reps input for a single set |
 | `RestTimer.tsx` | Full-screen and mini rest timer overlay |
 | `WorkoutProgress.tsx` | Progress bar showing completed exercises |
 
 The `ExercisePickerModal` is a shared component used by `create-split.tsx`, `edit-template.tsx`, `[id].tsx`, and `empty.tsx`. It was extracted to eliminate duplication of the search/filter/group-by-muscle logic that was previously inlined in each screen. It exports `MUSCLE_LABELS` locally and re-exports `EQUIPMENT_LABELS` from `@/constants/Labels`.
+
+### FlashList Migration
+
+The following screens use `@shopify/flash-list` (v2.0.2) instead of `FlatList`/`SectionList` for improved rendering performance:
+
+| Screen/Component | List Type | Details |
+|-----------------|-----------|---------|
+| `history.tsx` | `FlashList` | Workout history list with expandable cards |
+| `ExercisePickerModal.tsx` | `FlashList` | Exercise list with section headers (uses `getItemType` for heterogeneous data) |
+
+FlashList provides recycled cell rendering with significantly lower memory usage and faster scroll performance, particularly beneficial for the 170+ exercise list in the picker modal.
 
 ### Nutrition Components (`components/nutrition/`)
 
@@ -128,6 +139,26 @@ The `ExercisePickerModal` is a shared component used by `create-split.tsx`, `edi
 |-----------|---------|
 | `DayPicker.tsx` | Day-of-week multi-select picker |
 | `StepIndicator.tsx` | Multi-step progress indicator |
+
+## Data Export (`utils/exportData.ts`)
+
+The settings screen includes a "Export Data" action that exports all user data to a JSON file via the device share sheet.
+
+**Exported data includes:**
+- Workout splits, templates, and template exercises
+- Custom exercises (user-created only, not the 170+ built-in)
+- Workout sessions and set logs
+- Meal targets and meal logs
+- User settings (weight unit, rest timer, theme)
+
+**Implementation details:**
+- Uses `expo-file-system` (`File` / `Paths` API) to write a temporary JSON file to the cache directory
+- Uses `expo-sharing` to open the native share sheet
+- File is named `gymtrack-export-YYYY-MM-DD.json`
+- Includes `exportVersion` (currently 1) and `appVersion` metadata
+- Temp file is cleaned up in a `finally` block after sharing
+
+**Integration:** The settings screen (`app/settings.tsx`) calls `exportData()` with a loading state and error handling via `Alert.alert`.
 
 ## Design System
 

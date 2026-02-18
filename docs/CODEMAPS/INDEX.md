@@ -1,10 +1,10 @@
 # Workout Tracker - Architecture Overview
 
-> Version 1.0.0 | Last updated: 2026-02-07
+> Version 1.1.0 | Last updated: 2026-02-18
 
 ## Project Overview
 
-Workout Tracker is a React Native workout tracking application built with Expo. It provides workout template management (including split exercise editing), live session tracking, progressive overload monitoring, workout history analysis, meal/nutrition tracking, and USDA food search with weight-based macro estimation. The codebase follows a modular architecture with centralized types, date utilities, label constants, and reusable animation hooks.
+Workout Tracker is a React Native workout tracking application built with Expo. It provides workout template management (including split exercise editing), live session tracking, progressive overload monitoring, workout history analysis, meal/nutrition tracking, USDA food search with weight-based macro estimation, and data export to JSON. The codebase follows a modular architecture with centralized types, shared database queries, date utilities, label constants, and reusable animation hooks.
 
 ## System Architecture
 
@@ -13,10 +13,14 @@ Workout Tracker is a React Native workout tracking application built with Expo. 
 │                      Mobile App (Expo)                       │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
 │  │   Screens   │  │  Components │  │       Hooks         │  │
-│  │  (app/*)    │  │             │  │  (data management)  │  │
+│  │  (app/*)    │  │ (FlashList) │  │  (data management)  │  │
 │  └──────┬──────┘  └──────┬──────┘  └──────────┬──────────┘  │
 │         │                │                     │             │
 │         └────────────────┼─────────────────────┘             │
+│                          │                                   │
+│                   ┌──────▼──────┐                            │
+│                   │ db/queries  │  (shared query layer)      │
+│                   └──────┬──────┘                            │
 │                          │                                   │
 │                   ┌──────▼──────┐                            │
 │                   │  Drizzle ORM │                           │
@@ -27,9 +31,10 @@ Workout Tracker is a React Native workout tracking application built with Expo. 
 │                   │  (local DB) │                            │
 │                   └─────────────┘                            │
 │                          │                                   │
-│                   ┌──────▼──────┐                            │
-│                   │ Food Cache  │  (USDA search results)     │
-│                   └─────────────┘                            │
+│          ┌───────────────┼───────────────┐                   │
+│   ┌──────▼──────┐                ┌──────▼──────┐            │
+│   │ Food Cache  │ (USDA search)  │ Data Export │ (JSON)     │
+│   └─────────────┘                └─────────────┘            │
 └─────────────────────────────────────────────────────────────┘
                      │              │
               Feedback API    USDA FoodData
@@ -87,13 +92,14 @@ workout-tracker/
 ├── db/                          # Database layer
 │   ├── index.ts                 # Database instance
 │   ├── schema.ts                # Drizzle schema definitions
+│   ├── queries.ts               # Shared query functions (batch fetches)
 │   ├── migrations.ts            # Schema migrations
 │   └── seed.ts                  # Seed data (170+ exercises)
 ├── hooks/                       # Custom React hooks
-│   ├── useWorkoutTemplates.ts   # Template & split management
-│   ├── useWorkoutHistory.ts     # Past sessions (types from @/types)
-│   ├── useWorkoutDashboard.ts   # Dashboard data (dates from @/utils/dates)
-│   ├── useProgressiveOverload.ts # Progress tracking
+│   ├── useWorkoutTemplates.ts   # Template & split management (uses db/queries)
+│   ├── useWorkoutHistory.ts     # Past sessions (uses db/queries for batch stats)
+│   ├── useWorkoutDashboard.ts   # Dashboard data (uses db/queries + utils/dates)
+│   ├── useProgressiveOverload.ts # Progress tracking (uses db/queries)
 │   ├── useMealTracking.ts       # Meal CRUD, targets & weekly summary
 │   ├── useFoodSearch.ts         # Debounced USDA food search hook
 │   ├── usePressScale.ts         # Reanimated press-scale animation hook
@@ -109,6 +115,7 @@ workout-tracker/
 │   ├── mealDates.ts             # Weekday date helpers (Mon-Fri)
 │   ├── mealImage.ts             # Meal photo pick/save/delete
 │   ├── foodSearch.ts            # USDA food search, caching & macro estimation
+│   ├── exportData.ts            # Data export to JSON (via expo-sharing)
 │   └── __tests__/
 │       └── foodSearch.test.ts   # estimateMacros unit tests
 └── assets/                      # Static assets
@@ -125,8 +132,11 @@ workout-tracker/
 | Navigation | Expo Router | 6.0.22 |
 | Database | expo-sqlite | 16.0.10 |
 | ORM | Drizzle ORM | 0.45.1 |
+| Lists | @shopify/flash-list | 2.0.2 |
 | Animations | react-native-reanimated | 4.1.1 |
 | Gestures | react-native-gesture-handler | 2.28.0 |
+| File System | expo-file-system | 19.0.21 |
+| Sharing | expo-sharing | 14.0.8 |
 | Audio | expo-av | 16.0.8 |
 | Haptics | expo-haptics | 15.0.8 |
 | Testing | Jest (jest-expo) | 54.0.16 |
@@ -162,6 +172,9 @@ Session updated (completedAt, durationSeconds)
 useProgressiveOverload(exerciseId)
         │
         ▼
+fetchExercisesByIds() (from db/queries)
+        │
+        ▼
 Query setLogs for exercise across sessions
         │
         ▼
@@ -172,6 +185,67 @@ Detect stalls (no progress in 3+ sessions)
         │
         ▼
 Return suggestions (increase weight/reps)
+```
+
+### Data Export Flow
+```
+User taps "Export Data" in Settings
+        │
+        ▼
+exportData() (from utils/exportData)
+        │
+        ▼
+Query all tables via Drizzle ORM
+(splits, templates, exercises, sessions, setLogs,
+ meals, targets, settings)
+        │
+        ▼
+Build JSON payload with exportVersion + appVersion
+        │
+        ▼
+Write to cache directory (expo-file-system)
+        │
+        ▼
+Open share sheet (expo-sharing)
+        │
+        ▼
+Clean up temp file
+```
+
+### Shared Query Layer (`db/queries.ts`)
+```
+Hooks / Contexts
+        │
+        ▼
+┌─────────────────────────────────────────────────┐
+│  db/queries.ts (centralized batch queries)      │
+│                                                 │
+│  fetchTemplateDetails(ids)                      │
+│    → exercise counts + last performed dates     │
+│    Used by: useWorkoutTemplates,                │
+│             useWorkoutDashboard                 │
+│                                                 │
+│  fetchTemplateExercisesWithDetails(templateId)  │
+│    → template exercises with joined details     │
+│    Used by: useTemplateExercises                │
+│                                                 │
+│  fetchExercisesByIds(ids)                       │
+│    → batch exercise lookup                      │
+│    Used by: useWorkoutHistory,                  │
+│             ActiveWorkoutContext,               │
+│             useProgressiveOverload              │
+│                                                 │
+│  fetchSessionSetStats(sessionIds)               │
+│    → exercise count, total sets, volume         │
+│    Used by: useWorkoutHistory                   │
+│                                                 │
+│  fetchPreviousMaxWeights(ids, beforeDate)       │
+│    → max weight per exercise for PR detection   │
+│    Used by: useWorkoutDetails                   │
+└─────────────────────────────────────────────────┘
+        │
+        ▼
+    Drizzle ORM → SQLite
 ```
 
 ## Navigation Structure
